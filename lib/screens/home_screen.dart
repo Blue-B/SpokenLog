@@ -29,6 +29,7 @@ import '../services/recording_service.dart';
 import '../services/settings_service.dart';
 import '../services/transcript_export_service.dart';
 import '../utils/formatters.dart';
+import '../widgets/transcript_editor_dialog.dart';
 
 enum _WorkspaceView { records, calendar }
 
@@ -83,6 +84,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final Set<String> _transcribing = <String>{};
   final Map<String, String> _transcribingProgress = <String, String>{};
   final Set<String> _expandedTranscripts = <String>{};
+  bool _batchTranscriptionRunning = false;
+  int _batchTranscriptionCompleted = 0;
+  int _batchTranscriptionTotal = 0;
 
   StreamSubscription<Duration>? _positionSubscription;
   StreamSubscription<Duration>? _durationSubscription;
@@ -551,6 +555,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _transcribe(
     RecordingItem item, {
     TranscriptionProvider? providerOverride,
+    bool announceCompletion = true,
   }) async {
     final provider = providerOverride ?? await _settings.getProvider();
     final language = await _settings.getTranscriptionLanguage();
@@ -714,10 +719,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ? ' · 일일 요청 잔여 ${quota!.remainingRequests}회'
           : '';
 
-      _message(
-        '${provider.shortLabel} · ${language.label} 전사가 완료되었습니다.'
-        '$quotaText${diarizationNote ?? ''}',
-      );
+      if (announceCompletion) {
+        _message(
+          '${provider.shortLabel} · ${language.label} 전사가 완료되었습니다.'
+          '$quotaText${diarizationNote ?? ''}',
+        );
+      }
     } on TranscriptionException catch (e) {
       if (e.canFallback) {
         fallback = await _chooseFallbackProvider(
@@ -749,7 +756,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (fallback != null && mounted) {
-      await _transcribe(item, providerOverride: fallback);
+      await _transcribe(
+        item,
+        providerOverride: fallback,
+        announceCompletion: announceCompletion,
+      );
     }
   }
 
@@ -2480,6 +2491,7 @@ class _HomeScreenState extends State<HomeScreen> {
         dialogTitle: '오디오 또는 영상 파일 가져오기',
         type: FileType.custom,
         allowedExtensions: RecordingService.supportedImportExtensions,
+        allowMultiple: true,
       );
       if (files.isEmpty) return;
 
@@ -2566,6 +2578,32 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() => _importingFiles = false);
       }
+    }
+  }
+
+  Future<void> _editTranscript(RecordingItem item) async {
+    final result = await TranscriptEditorDialog.show(
+      context,
+      item: item,
+      useEnglish: _useEnglish,
+    );
+    if (result == null) return;
+
+    try {
+      await _recording.updateTranscript(
+        item,
+        text: result.text,
+        segments: result.segments,
+        speakerLabels: result.speakerLabels,
+      );
+      await _reload();
+      _expandedTranscripts.add(item.id);
+      _message(_t('전사문을 저장했습니다.', 'Transcript saved.'));
+    } catch (e) {
+      _message(
+        _t('전사문을 저장하지 못했습니다: $e', 'Could not save transcript: $e'),
+        error: true,
+      );
     }
   }
 
@@ -2797,6 +2835,44 @@ class _HomeScreenState extends State<HomeScreen> {
       _selectionMode = false;
       _batchSelectedIds.clear();
     });
+  }
+
+  Future<void> _batchTranscribeSelected() async {
+    if (_batchTranscriptionRunning) return;
+    final items = _batchSelectedItems
+        .where((item) => !item.isDeleted)
+        .toList(growable: false);
+    if (items.isEmpty) return;
+
+    setState(() {
+      _batchTranscriptionRunning = true;
+      _batchTranscriptionCompleted = 0;
+      _batchTranscriptionTotal = items.length;
+    });
+
+    try {
+      for (var index = 0; index < items.length; index++) {
+        if (!mounted) return;
+        await _transcribe(items[index], announceCompletion: false);
+        if (!mounted) return;
+        setState(() => _batchTranscriptionCompleted = index + 1);
+      }
+      _message(
+        _t(
+          '${items.length}개 기록의 전사 대기열 처리가 끝났습니다.',
+          'Finished the transcription queue for ${items.length} recordings.',
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _batchTranscriptionRunning = false;
+          _batchTranscriptionCompleted = 0;
+          _batchTranscriptionTotal = 0;
+        });
+        _clearBatchSelection();
+      }
+    }
   }
 
   Future<void> _batchFavorite(bool value) async {
@@ -3216,6 +3292,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ] else ...[
+                    IconButton(
+                      tooltip: _batchTranscriptionRunning
+                          ? _t(
+                              '전사 대기열 $_batchTranscriptionCompleted/$_batchTranscriptionTotal',
+                              'Transcription queue $_batchTranscriptionCompleted/$_batchTranscriptionTotal',
+                            )
+                          : _t('선택한 기록 전사', 'Transcribe selected'),
+                      onPressed: selectedCount == 0 || _batchTranscriptionRunning
+                          ? null
+                          : () => unawaited(_batchTranscribeSelected()),
+                      icon: _batchTranscriptionRunning
+                          ? const SizedBox.square(
+                              dimension: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.auto_awesome_outlined, size: 20),
+                    ),
                     IconButton(
                       tooltip: _t('보관함으로 이동', 'Move to collection'),
                       onPressed: selectedCount == 0
@@ -3639,7 +3732,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             borderRadius: BorderRadius.circular(6),
                           ),
                           child: Text(
-                            '화자 ${segment.speaker! + 1}',
+                            item.speakerLabel(segment.speaker!),
                             textAlign: TextAlign.center,
                             style:
                                 Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -3994,11 +4087,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   if (item.hasTranscript)
                     OutlinedButton.icon(
+                      onPressed: () => unawaited(_editTranscript(item)),
+                      icon: const Icon(Icons.edit_note_rounded, size: 18),
+                      label: Text(_t('수정', 'Edit')),
+                    ),
+                  if (item.hasTranscript)
+                    OutlinedButton.icon(
                       onPressed: () {
                         Clipboard.setData(
                           ClipboardData(text: item.transcript!),
                         );
-                        _message('전사문을 복사했습니다.');
+                        _message(_t('전사문을 복사했습니다.', 'Transcript copied.'));
                       },
                       icon: const Icon(Icons.copy_outlined, size: 17),
                       label: Text(_t('복사', 'Copy')),
