@@ -101,7 +101,7 @@ class _TranscriptEditorDialogState extends State<TranscriptEditorDialog> {
       segments.add(widget.item.segments[i].withText(text));
     }
 
-    final text = segments.isNotEmpty
+    final text = widget.item.segments.isNotEmpty
         ? segments.map((segment) => segment.text).join(' ')
         : _fullTextController.text.trim();
 
