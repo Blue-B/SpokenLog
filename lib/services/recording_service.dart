@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -9,6 +8,7 @@ import 'package:record/record.dart';
 import '../models/recording_collection.dart';
 import '../models/recording_item.dart';
 import '../models/transcription_result.dart';
+import '../utils/wav_duration.dart';
 import 'background_recording_service.dart';
 
 class RecordingService {
@@ -494,7 +494,7 @@ class RecordingService {
   }) async {
     for (final audio in audioFiles) {
       if (!audio.path.toLowerCase().endsWith('.wav')) continue;
-      final recoveredMs = await _wavDurationMs(audio);
+      final recoveredMs = await readWavDurationMs(audio);
       if (recoveredMs > (durations[audio.uri.pathSegments.last] ?? 0)) {
         durations[audio.uri.pathSegments.last] = recoveredMs;
       }
@@ -515,72 +515,6 @@ class RecordingService {
       }
     }
     await metadataFile.writeAsString(jsonEncode(metadata), flush: true);
-  }
-
-  Future<int> _wavDurationMs(File file) async {
-    RandomAccessFile? handle;
-    try {
-      handle = await file.open();
-      final fileLength = await handle.length();
-      if (fileLength < 44) return 0;
-
-      final headerLength = fileLength < 65536 ? fileLength : 65536;
-      final bytes = await handle.read(headerLength);
-      if (bytes.length < 44 ||
-          bytes[0] != 0x52 ||
-          bytes[1] != 0x49 ||
-          bytes[2] != 0x46 ||
-          bytes[3] != 0x46 ||
-          bytes[8] != 0x57 ||
-          bytes[9] != 0x41 ||
-          bytes[10] != 0x56 ||
-          bytes[11] != 0x45) {
-        return 0;
-      }
-
-      final data = ByteData.sublistView(Uint8List.fromList(bytes));
-      int? byteRate;
-      int? dataOffset;
-      int? declaredDataSize;
-      var offset = 12;
-
-      while (offset + 8 <= bytes.length) {
-        final chunkSize = data.getUint32(offset + 4, Endian.little);
-        final payloadOffset = offset + 8;
-        final isFmt = bytes[offset] == 0x66 &&
-            bytes[offset + 1] == 0x6d &&
-            bytes[offset + 2] == 0x74 &&
-            bytes[offset + 3] == 0x20;
-        final isData = bytes[offset] == 0x64 &&
-            bytes[offset + 1] == 0x61 &&
-            bytes[offset + 2] == 0x74 &&
-            bytes[offset + 3] == 0x61;
-
-        if (isFmt && chunkSize >= 16 && payloadOffset + 12 <= bytes.length) {
-          byteRate = data.getUint32(payloadOffset + 8, Endian.little);
-        }
-        if (isData) {
-          dataOffset = payloadOffset;
-          declaredDataSize = chunkSize;
-          break;
-        }
-
-        final paddedSize = chunkSize + (chunkSize.isOdd ? 1 : 0);
-        offset = payloadOffset + paddedSize;
-      }
-
-      if (byteRate == null || byteRate <= 0 || dataOffset == null) return 0;
-      final available = fileLength - dataOffset;
-      if (available <= 0) return 0;
-      final declared = declaredDataSize ?? 0;
-      final audioBytes =
-          declared > 0 && declared <= available ? declared : available;
-      return (audioBytes * 1000 ~/ byteRate);
-    } catch (_) {
-      return 0;
-    } finally {
-      await handle?.close();
-    }
   }
 
   Future<RecordingItem> importAudioFile(String sourcePath) async {
