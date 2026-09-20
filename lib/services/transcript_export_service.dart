@@ -99,7 +99,7 @@ class TranscriptExportService {
           '${_subtitleTime(segment.startSeconds)} --> '
           '${_subtitleTime(_safeEnd(segment))}',
         )
-        ..writeln(_speakerText(segment))
+        ..writeln(_speakerText(item, segment))
         ..writeln();
     }
 
