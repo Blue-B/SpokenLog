@@ -11,6 +11,7 @@ void main() {
     storagePath: '/tmp/sample',
     chunks: const [],
     transcript: '안녕하세요\n반갑습니다',
+    speakerLabels: const {0: '진행자', 1: '참석자'},
     segments: const [
       TranscriptSegment(
         startSeconds: 1.2,
@@ -33,8 +34,8 @@ void main() {
       TranscriptExportFormat.txt,
     );
 
-    expect(text, contains('[00:01] 화자 1: 안녕하세요'));
-    expect(text, contains('[00:04] 화자 2: 반갑습니다'));
+    expect(text, contains('[00:01] 진행자: 안녕하세요'));
+    expect(text, contains('[00:04] 참석자: 반갑습니다'));
   });
 
   test('builds valid srt timing', () {
@@ -44,7 +45,7 @@ void main() {
     );
 
     expect(text, contains('00:00:01,200 --> 00:00:03,400'));
-    expect(text, contains('화자 1: 안녕하세요'));
+    expect(text, contains('진행자: 안녕하세요'));
   });
 
   test('builds webvtt header', () {
@@ -65,5 +66,6 @@ void main() {
 
     expect(text, contains('"title": "회의 기록"'));
     expect(text, contains('"speaker": 0'));
+    expect(text, contains('"0": "진행자"'));
   });
 }

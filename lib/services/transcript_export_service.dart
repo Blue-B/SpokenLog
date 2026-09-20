@@ -65,7 +65,7 @@ class TranscriptExportService {
     return item.segments
         .map(
           (segment) =>
-              '[${_plainTime(segment.startSeconds)}] ${_speakerText(segment)}',
+              '[${_plainTime(segment.startSeconds)}] ${_speakerText(item, segment)}',
         )
         .join('\n');
   }
@@ -82,7 +82,7 @@ class TranscriptExportService {
           '${_subtitleTime(segment.startSeconds, comma: true)} --> '
           '${_subtitleTime(_safeEnd(segment), comma: true)}',
         )
-        ..writeln(_speakerText(segment))
+        ..writeln(_speakerText(item, segment))
         ..writeln();
     }
 
@@ -99,7 +99,7 @@ class TranscriptExportService {
           '${_subtitleTime(segment.startSeconds)} --> '
           '${_subtitleTime(_safeEnd(segment))}',
         )
-        ..writeln(_speakerText(segment))
+        ..writeln(_speakerText(item, segment))
         ..writeln();
     }
 
@@ -111,6 +111,9 @@ class TranscriptExportService {
       'title': item.displayTitle,
       'createdAt': item.createdAt.toIso8601String(),
       'text': item.transcript?.trim() ?? '',
+      'speakerLabels': item.speakerLabels.map(
+        (key, value) => MapEntry(key.toString(), value),
+      ),
       'segments': item.segments.map((segment) => segment.toJson()).toList(),
     };
     return const JsonEncoder.withIndent('  ').convert(payload);
@@ -142,10 +145,10 @@ class TranscriptExportService {
     return segment.startSeconds + 2;
   }
 
-  String _speakerText(TranscriptSegment segment) {
+  String _speakerText(RecordingItem item, TranscriptSegment segment) {
     final speaker = segment.speaker;
     if (speaker == null) return segment.text;
-    return '화자 ${speaker + 1}: ${segment.text}';
+    return '${item.speakerLabel(speaker)}: ${segment.text}';
   }
 
   String _plainTime(double seconds) {

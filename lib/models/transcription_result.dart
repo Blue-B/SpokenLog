@@ -44,6 +44,15 @@ class TranscriptSegment {
       speaker: value,
     );
   }
+
+  TranscriptSegment withText(String value) {
+    return TranscriptSegment(
+      startSeconds: startSeconds,
+      endSeconds: endSeconds,
+      text: value.trim(),
+      speaker: speaker,
+    );
+  }
 }
 
 class TranscriptionResult {
@@ -51,23 +60,41 @@ class TranscriptionResult {
     required this.text,
     required this.segments,
     this.durationSeconds,
+    this.speakerLabels = const <int, String>{},
   });
 
   final String text;
   final List<TranscriptSegment> segments;
   final double? durationSeconds;
+  final Map<int, String> speakerLabels;
 
   Map<String, dynamic> toJson() => {
         'text': text,
         'duration': durationSeconds,
+        'speakerLabels': speakerLabels.map(
+          (key, value) => MapEntry(key.toString(), value),
+        ),
         'segments': segments.map((segment) => segment.toJson()).toList(),
       };
 
   factory TranscriptionResult.fromJson(Map<String, dynamic> json) {
     final rawSegments = json['segments'];
+    final rawSpeakerLabels = json['speakerLabels'];
+    final speakerLabels = <int, String>{};
+    if (rawSpeakerLabels is Map) {
+      for (final entry in rawSpeakerLabels.entries) {
+        final speaker = int.tryParse(entry.key.toString());
+        final label = entry.value?.toString().trim() ?? '';
+        if (speaker != null && speaker >= 0 && label.isNotEmpty) {
+          speakerLabels[speaker] = label;
+        }
+      }
+    }
+
     return TranscriptionResult(
       text: json['text']?.toString().trim() ?? '',
       durationSeconds: (json['duration'] as num?)?.toDouble(),
+      speakerLabels: speakerLabels,
       segments: rawSegments is List
           ? rawSegments
               .whereType<Map>()
@@ -87,6 +114,16 @@ class TranscriptionResult {
       text: text,
       segments: value,
       durationSeconds: durationSeconds,
+      speakerLabels: speakerLabels,
+    );
+  }
+
+  TranscriptionResult withSpeakerLabels(Map<int, String> value) {
+    return TranscriptionResult(
+      text: text,
+      segments: segments,
+      durationSeconds: durationSeconds,
+      speakerLabels: value,
     );
   }
 }

@@ -19,6 +19,19 @@ void main() {
     expect(item.displayTitle, '회의');
   });
 
+  test('uses custom speaker labels with a safe fallback', () {
+    final item = RecordingItem(
+      id: 'recording_1',
+      createdAt: DateTime(2026, 9, 19),
+      chunks: const [],
+      storagePath: 'recordings/recording_1',
+      speakerLabels: const {0: '진행자'},
+    );
+
+    expect(item.speakerLabel(0), '진행자');
+    expect(item.speakerLabel(1), '화자 2');
+  });
+
   test('falls back to default title', () {
     final item = RecordingItem(
       id: 'recording_1',

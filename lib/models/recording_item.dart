@@ -24,6 +24,7 @@ class RecordingItem {
     this.title,
     this.transcript,
     this.segments = const [],
+    this.speakerLabels = const <int, String>{},
     this.collectionId,
     this.isFavorite = false,
     this.deletedAt,
@@ -37,6 +38,7 @@ class RecordingItem {
   final String? title;
   final String? transcript;
   final List<TranscriptSegment> segments;
+  final Map<int, String> speakerLabels;
   final String? collectionId;
   final bool isFavorite;
   final DateTime? deletedAt;
@@ -54,6 +56,12 @@ class RecordingItem {
   bool get hasTranscript => transcript?.trim().isNotEmpty == true;
 
   bool get isDeleted => deletedAt != null;
+
+  String speakerLabel(int speaker) {
+    final custom = speakerLabels[speaker]?.trim();
+    if (custom != null && custom.isNotEmpty) return custom;
+    return '화자 ${speaker + 1}';
+  }
 
   int get durationMs =>
       chunks.fold(0, (sum, chunk) => sum + chunk.durationMs);
@@ -79,6 +87,7 @@ class RecordingItem {
     String? title,
     String? transcript,
     List<TranscriptSegment>? segments,
+    Map<int, String>? speakerLabels,
     String? collectionId,
     bool? isFavorite,
     DateTime? deletedAt,
@@ -91,6 +100,7 @@ class RecordingItem {
       title: title ?? this.title,
       transcript: transcript ?? this.transcript,
       segments: segments ?? this.segments,
+      speakerLabels: speakerLabels ?? this.speakerLabels,
       collectionId: collectionId ?? this.collectionId,
       isFavorite: isFavorite ?? this.isFavorite,
       deletedAt: deletedAt ?? this.deletedAt,

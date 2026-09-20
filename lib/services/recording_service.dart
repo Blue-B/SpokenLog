@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,6 +8,7 @@ import 'package:record/record.dart';
 import '../models/recording_collection.dart';
 import '../models/recording_item.dart';
 import '../models/transcription_result.dart';
+import '../utils/wav_duration.dart';
 import 'background_recording_service.dart';
 
 class RecordingService {
@@ -36,6 +38,7 @@ class RecordingService {
   bool _stopRequested = false;
   bool _paused = false;
   String? _activeTitle;
+  Timer? _checkpointTimer;
 
   Future<Directory> _recordingsDirectory() async {
     final root = await getApplicationDocumentsDirectory();
@@ -190,12 +193,23 @@ class RecordingService {
       _activeResumeAt = DateTime.now();
       await _background.updatePart(1);
       await _writeActiveMetadata(state: 'recording');
+      _startCheckpointTimer();
       return sessionId;
     } catch (_) {
       await _background.stop();
       _resetActiveState();
       rethrow;
     }
+  }
+
+  void _startCheckpointTimer() {
+    _checkpointTimer?.cancel();
+    _checkpointTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (_activeSessionDir == null || _stopRequested) return;
+      unawaited(
+        _writeActiveMetadata(state: _paused ? 'paused' : 'recording'),
+      );
+    });
   }
 
   Duration _activeElapsed() {
@@ -261,6 +275,8 @@ class RecordingService {
   }
 
   void _resetActiveState() {
+    _checkpointTimer?.cancel();
+    _checkpointTimer = null;
     _activeSessionDir = null;
     _activeSessionStartedAt = null;
     _activeResumeAt = null;
@@ -344,6 +360,7 @@ class RecordingService {
     String? collectionId;
     var isFavorite = false;
     DateTime? deletedAt;
+    String sessionState = '';
 
     final metadataFile =
         File('${dir.path}${Platform.pathSeparator}session.json');
@@ -354,6 +371,7 @@ class RecordingService {
       collectionId = map['collectionId']?.toString();
       isFavorite = map['isFavorite'] == true;
       deletedAt = DateTime.tryParse(map['deletedAt']?.toString() ?? '');
+      sessionState = map['state']?.toString() ?? '';
       createdAt =
           DateTime.tryParse(map['createdAt']?.toString() ?? '') ?? createdAt;
 
@@ -380,6 +398,15 @@ class RecordingService {
     audioFiles.sort((a, b) => a.path.compareTo(b.path));
     if (audioFiles.isEmpty) return null;
 
+    if (sessionState == 'recording' || sessionState == 'paused') {
+      await _recoverInterruptedSession(
+        metadataFile: metadataFile,
+        metadata: map,
+        audioFiles: audioFiles,
+        durations: durations,
+      );
+    }
+
     final chunks = audioFiles
         .map(
           (file) => RecordingChunk(
@@ -394,9 +421,12 @@ class RecordingService {
     final transcript = await transcriptFile.exists()
         ? await transcriptFile.readAsString()
         : null;
-    final segments = await _readSegments(
+    final transcription = await _readTranscriptionResult(
       File('${dir.path}${Platform.pathSeparator}transcript.json'),
     );
+    final segments = transcription?.segments ?? const <TranscriptSegment>[];
+    final speakerLabels =
+        transcription?.speakerLabels ?? const <int, String>{};
 
     return RecordingItem(
       id: id,
@@ -406,6 +436,7 @@ class RecordingService {
       storagePath: dir.path,
       transcript: transcript,
       segments: segments,
+      speakerLabels: speakerLabels,
       collectionId: collectionId,
       isFavorite: isFavorite,
       deletedAt: deletedAt,
@@ -418,8 +449,12 @@ class RecordingService {
     final transcript = await transcriptFile.exists()
         ? await transcriptFile.readAsString()
         : null;
-    final segments =
-        await _readSegments(File('${file.path}.transcript.json'));
+    final transcription = await _readTranscriptionResult(
+      File('${file.path}.transcript.json'),
+    );
+    final segments = transcription?.segments ?? const <TranscriptSegment>[];
+    final speakerLabels =
+        transcription?.speakerLabels ?? const <int, String>{};
     final metadata = await _readJsonFile(File('${file.path}.meta.json'));
 
     return RecordingItem(
@@ -430,6 +465,7 @@ class RecordingService {
       storagePath: file.path,
       transcript: transcript,
       segments: segments,
+      speakerLabels: speakerLabels,
       collectionId: metadata['collectionId']?.toString(),
       isFavorite: metadata['isFavorite'] == true,
       deletedAt: DateTime.tryParse(metadata['deletedAt']?.toString() ?? ''),
@@ -437,17 +473,48 @@ class RecordingService {
     );
   }
 
-  Future<List<TranscriptSegment>> _readSegments(File file) async {
-    if (!await file.exists()) return const [];
+  Future<TranscriptionResult?> _readTranscriptionResult(File file) async {
+    if (!await file.exists()) return null;
     try {
       final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! Map) return const [];
+      if (decoded is! Map) return null;
       return TranscriptionResult.fromJson(
         Map<String, dynamic>.from(decoded),
-      ).segments;
+      );
     } catch (_) {
-      return const [];
+      return null;
     }
+  }
+
+  Future<void> _recoverInterruptedSession({
+    required File metadataFile,
+    required Map<String, dynamic> metadata,
+    required List<File> audioFiles,
+    required Map<String, int> durations,
+  }) async {
+    for (final audio in audioFiles) {
+      if (!audio.path.toLowerCase().endsWith('.wav')) continue;
+      final recoveredMs = await readWavDurationMs(audio);
+      if (recoveredMs > (durations[audio.uri.pathSegments.last] ?? 0)) {
+        durations[audio.uri.pathSegments.last] = recoveredMs;
+      }
+    }
+
+    metadata['state'] = 'recovered';
+    metadata['recoveredAt'] = DateTime.now().toIso8601String();
+    final rawChunks = metadata['chunks'];
+    if (rawChunks is List) {
+      for (final raw in rawChunks.whereType<Map>()) {
+        final chunk = Map<String, dynamic>.from(raw);
+        final fileName = chunk['file']?.toString();
+        if (fileName == null) continue;
+        chunk['durationMs'] = durations[fileName] ?? 0;
+        raw
+          ..clear()
+          ..addAll(chunk);
+      }
+    }
+    await metadataFile.writeAsString(jsonEncode(metadata), flush: true);
   }
 
   Future<RecordingItem> importAudioFile(String sourcePath) async {
@@ -531,9 +598,42 @@ class RecordingService {
     RecordingItem item,
     TranscriptionResult result,
   ) async {
-    await File(item.transcriptPath).writeAsString(result.text, flush: true);
+    final stored = result.speakerLabels.isEmpty && item.speakerLabels.isNotEmpty
+        ? result.withSpeakerLabels(item.speakerLabels)
+        : result;
+    await File(item.transcriptPath).writeAsString(stored.text, flush: true);
     await File(item.transcriptJsonPath)
-        .writeAsString(jsonEncode(result.toJson()), flush: true);
+        .writeAsString(jsonEncode(stored.toJson()), flush: true);
+  }
+
+  Future<void> updateTranscript(
+    RecordingItem item, {
+    required String text,
+    required List<TranscriptSegment> segments,
+    required Map<int, String> speakerLabels,
+  }) {
+    final cleanedSegments = segments
+        .where((segment) => segment.text.trim().isNotEmpty)
+        .toList(growable: false);
+    final cleanedLabels = <int, String>{
+      for (final entry in speakerLabels.entries)
+        if (entry.key >= 0 && entry.value.trim().isNotEmpty)
+          entry.key: entry.value.trim(),
+    };
+    final normalizedText = cleanedSegments.isNotEmpty
+        ? cleanedSegments.map((segment) => segment.text.trim()).join(' ')
+        : text.trim();
+
+    return saveTranscript(
+      item,
+      TranscriptionResult(
+        text: normalizedText,
+        segments: cleanedSegments,
+        durationSeconds:
+            item.durationMs > 0 ? item.durationMs / 1000 : null,
+        speakerLabels: cleanedLabels,
+      ),
+    );
   }
 
   Future<Map<String, dynamic>> _recordingMetadata(
@@ -639,6 +739,8 @@ class RecordingService {
   }
 
   Future<void> dispose() async {
+    _checkpointTimer?.cancel();
+    _checkpointTimer = null;
     await _recorder.dispose();
   }
 }
