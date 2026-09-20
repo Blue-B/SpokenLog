@@ -2491,7 +2491,6 @@ class _HomeScreenState extends State<HomeScreen> {
         dialogTitle: '오디오 또는 영상 파일 가져오기',
         type: FileType.custom,
         allowedExtensions: RecordingService.supportedImportExtensions,
-        allowMultiple: true,
       );
       if (files.isEmpty) return;
 
