@@ -8,6 +8,20 @@ SpokenLog is a local-first, cloud-optional recorder and transcription app. The n
 
 > Pre-release project. User-facing version numbers are intentionally not shown yet.
 
+## What makes SpokenLog different
+
+SpokenLog is built as a **recording library first, transcription tool second**. It is for people who want to keep everyday recordings organized and searchable without committing to one AI provider.
+
+- **One library for recording and transcription** — record, import, rename, organize into collections, favorite, search transcript text, browse by calendar, and recover deleted items.
+- **Native mobile direction** — Android is a first-class target rather than a phone remote for a desktop transcriber.
+- **Choose per device and situation** — stay fully local when privacy matters, or use your own Groq / Cloudflare credentials when cloud speed is more useful.
+- **Provider-independent speaker workflow** — local diarization can sit on top of supported local or cloud STT results, and speaker names plus transcript text remain editable afterward.
+- **No fake quota meter** — when a provider does not expose authoritative remaining usage, SpokenLog says so instead of inventing a number.
+- **Crash-aware recording storage** — active recordings checkpoint metadata periodically and interrupted WAV sessions are recovered on the next launch when possible.
+- **Batch without parallel chaos** — import multiple files and process selected recordings through a sequential transcription queue.
+
+If this workflow is useful to you, a GitHub star helps other people discover the project.
+
 ## Why SpokenLog
 
 - **Local ↔ Cloud without lock-in** — switch between SenseVoice, Moonshine, local Whisper, Groq, and Cloudflare.
@@ -22,7 +36,7 @@ SpokenLog is a local-first, cloud-optional recorder and transcription app. The n
 1. Record in SpokenLog or drag an existing file onto the app.
 2. Choose **Local** for privacy/offline use or **Cloud** for speed and stronger large-model accuracy.
 3. Optionally enable **Local speaker diarization**.
-4. Click a timestamp to review the audio, copy the transcript, or export TXT/SRT/VTT/JSON.
+4. Click a timestamp to review the audio, correct transcript segments or speaker names, then copy or export TXT/SRT/VTT/JSON.
 
 ### Imported files
 
@@ -94,7 +108,7 @@ Automatic detection plus Korean, English, Japanese, Chinese/Cantonese, Spanish, 
 - playback, seek, and speed control
 - timestamp click-to-seek
 - desktop library/sidebar + detail workspace
-- rename, search, reveal file location, delete confirmation
+- rename, transcript editing, custom speaker names, search, reveal file location, delete confirmation
 - API credentials stored in OS secure storage
 - local model download/delete management
 - fallback to another usable engine when a provider hits a recoverable error
