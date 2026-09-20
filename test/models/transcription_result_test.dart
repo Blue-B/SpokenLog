@@ -6,6 +6,7 @@ void main() {
     final result = TranscriptionResult.fromJson({
       'text': '안녕하세요',
       'duration': 3.5,
+      'speakerLabels': {'1': '진행자'},
       'segments': [
         {
           'start': 0.5,
@@ -20,6 +21,7 @@ void main() {
     expect(result.durationSeconds, 3.5);
     expect(result.segments, hasLength(1));
     expect(result.segments.first.speaker, 1);
+    expect(result.speakerLabels[1], '진행자');
 
     final shifted = result.segments.first.shifted(10);
     expect(shifted.startSeconds, 10.5);
@@ -41,6 +43,21 @@ void main() {
     final restored = TranscriptSegment.fromJson(labeled.toJson());
     expect(restored.speaker, 2);
     expect(restored.text, 'hello');
+
+    final edited = restored.withText(' revised ');
+    expect(edited.text, 'revised');
+    expect(edited.speaker, 2);
+  });
+
+  test('persists custom speaker labels', () {
+    const result = TranscriptionResult(
+      text: 'hello',
+      segments: [],
+      speakerLabels: {0: 'Host'},
+    );
+
+    final restored = TranscriptionResult.fromJson(result.toJson());
+    expect(restored.speakerLabels, {0: 'Host'});
   });
 
   test('ignores empty segment text', () {
