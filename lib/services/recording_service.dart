@@ -739,6 +739,8 @@ class RecordingService {
   }
 
   Future<void> dispose() async {
+    _checkpointTimer?.cancel();
+    _checkpointTimer = null;
     await _recorder.dispose();
   }
 }
