@@ -69,29 +69,6 @@ jobs:
       - name: Generate app icons
         run: dart run flutter_launcher_icons
 
-      - name: Package project source
-        shell: pwsh
-        run: |
-          $stage = "$env:RUNNER_TEMP\SpokenLog-Project"
-          $zip = "$env:RUNNER_TEMP\SpokenLog-Project.zip"
-          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-          if (Test-Path $zip) { Remove-Item $zip -Force }
-          New-Item -ItemType Directory -Path $stage | Out-Null
-
-          $exclude = @('.git', '.dart_tool', 'build', '.idea', 'SpokenLog-Project.zip')
-          Get-ChildItem -Force | Where-Object { $exclude -notcontains $_.Name } | ForEach-Object {
-            Copy-Item $_.FullName $stage -Recurse -Force
-          }
-
-          Compress-Archive -Path "$stage\*" -DestinationPath $zip -CompressionLevel Optimal
-
-      - name: Upload project source
-        uses: actions/upload-artifact@v4
-        with:
-          name: SpokenLog-Project
-          path: ${{ runner.temp }}/SpokenLog-Project.zip
-          if-no-files-found: error
-
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
@@ -107,6 +84,7 @@ jobs:
           name: SpokenLog-Windows
           path: build/windows/x64/runner/Release/**
           if-no-files-found: error
+          retention-days: 7
 
   build-android:
     runs-on: ubuntu-latest
@@ -152,3 +130,4 @@ jobs:
           name: SpokenLog-Android-debug
           path: build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
+          retention-days: 7
