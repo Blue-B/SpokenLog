@@ -156,3 +156,14 @@ Windows is the currently verified desktop release target. Android is a first-rel
 - API keys are never committed to the source repository.
 - Cloud transcription uploads audio only when the user explicitly starts transcription.
 - Local STT and local speaker diarization do not send the recording to an external transcription service.
+
+
+## License
+
+SpokenLog is free and open-source software licensed under the **GNU Affero General Public License v3.0 only (AGPL-3.0-only)**.
+
+You may use, study, modify, distribute, and use the software commercially under the terms of the AGPLv3. If you modify SpokenLog and make that modified version available to users over a network, the AGPL's network-source requirement applies: those users must be offered access to the corresponding source code for the version they are using.
+
+See [LICENSE](LICENSE) for the complete license text.
+
+The software license does not grant rights to present an unofficial fork or service as the official **SpokenLog** project. See [TRADEMARKS.md](TRADEMARKS.md) for the project branding policy.

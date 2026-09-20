@@ -1,0 +1,154 @@
+name: Build SpokenLog
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Windows desktop
+        run: flutter config --enable-windows-desktop
+
+      - name: Preserve app source
+        shell: pwsh
+        run: |
+          Copy-Item lib "$env:RUNNER_TEMP\spokenlog_lib" -Recurse
+          Copy-Item pubspec.yaml "$env:RUNNER_TEMP\spokenlog_pubspec.yaml"
+          Copy-Item analysis_options.yaml "$env:RUNNER_TEMP\spokenlog_analysis.yaml"
+          if (Test-Path assets) { Copy-Item assets "$env:RUNNER_TEMP\spokenlog_assets" -Recurse }
+          if (Test-Path test) { Copy-Item test "$env:RUNNER_TEMP\spokenlog_test" -Recurse }
+
+      - name: Create platform runners
+        run: flutter create . --platforms=windows,android --project-name voice_transcriber
+
+      - name: Prepare Windows runner
+        shell: pwsh
+        run: |
+          $cmakePath = "windows/CMakeLists.txt"
+          $cmake = Get-Content $cmakePath -Raw
+          $cmake = $cmake -replace 'cmake_minimum_required\(VERSION 3\.14\)', 'cmake_minimum_required(VERSION 3.15)'
+          $cmake = $cmake -replace 'cmake_policy\(VERSION 3\.14\.\.\.3\.25\)', 'cmake_policy(VERSION 3.15...3.25)'
+          $cmake = $cmake -replace 'set\(BINARY_NAME "voice_transcriber"\)', 'set(BINARY_NAME "SpokenLog")'
+          Set-Content -Path $cmakePath -Value $cmake -NoNewline
+
+          $mainPath = "windows/runner/main.cpp"
+          $main = Get-Content $mainPath -Raw
+          $main = $main -replace 'L"voice_transcriber"', 'L"SpokenLog"'
+          Set-Content -Path $mainPath -Value $main -NoNewline
+
+      - name: Restore app source
+        shell: pwsh
+        run: |
+          Remove-Item lib -Recurse -Force
+          Copy-Item "$env:RUNNER_TEMP\spokenlog_lib" lib -Recurse
+          Copy-Item "$env:RUNNER_TEMP\spokenlog_pubspec.yaml" pubspec.yaml -Force
+          Copy-Item "$env:RUNNER_TEMP\spokenlog_analysis.yaml" analysis_options.yaml -Force
+          if (Test-Path "$env:RUNNER_TEMP\spokenlog_assets") {
+            if (Test-Path assets) { Remove-Item assets -Recurse -Force }
+            Copy-Item "$env:RUNNER_TEMP\spokenlog_assets" assets -Recurse
+          }
+          if (Test-Path test) { Remove-Item test -Recurse -Force }
+          if (Test-Path "$env:RUNNER_TEMP\spokenlog_test") {
+            Copy-Item "$env:RUNNER_TEMP\spokenlog_test" test -Recurse
+          }
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Generate app icons
+        run: dart run flutter_launcher_icons
+
+      - name: Package project source
+        shell: pwsh
+        run: |
+          $stage = "$env:RUNNER_TEMP\SpokenLog-Project"
+          $zip = "$env:RUNNER_TEMP\SpokenLog-Project.zip"
+          if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+          if (Test-Path $zip) { Remove-Item $zip -Force }
+          New-Item -ItemType Directory -Path $stage | Out-Null
+
+          $exclude = @('.git', '.dart_tool', 'build', '.idea', 'SpokenLog-Project.zip')
+          Get-ChildItem -Force | Where-Object { $exclude -notcontains $_.Name } | ForEach-Object {
+            Copy-Item $_.FullName $stage -Recurse -Force
+          }
+
+          Compress-Archive -Path "$stage\*" -DestinationPath $zip -CompressionLevel Optimal
+
+      - name: Upload project source
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpokenLog-Project
+          path: ${{ runner.temp }}/SpokenLog-Project.zip
+          if-no-files-found: error
+
+      - name: Analyze
+        run: flutter analyze --no-fatal-infos
+
+      - name: Run tests
+        run: flutter test
+
+      - name: Build Windows release
+        run: flutter build windows --release
+
+      - name: Upload Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpokenLog-Windows
+          path: build/windows/x64/runner/Release/**
+          if-no-files-found: error
+
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Preserve app source
+        run: |
+          cp -R lib "$RUNNER_TEMP/spokenlog_lib"
+          cp pubspec.yaml "$RUNNER_TEMP/spokenlog_pubspec.yaml"
+          cp analysis_options.yaml "$RUNNER_TEMP/spokenlog_analysis.yaml"
+          if [ -d assets ]; then cp -R assets "$RUNNER_TEMP/spokenlog_assets"; fi
+          if [ -d test ]; then cp -R test "$RUNNER_TEMP/spokenlog_test"; fi
+
+      - name: Create Android runner
+        run: flutter create . --platforms=android --project-name voice_transcriber
+
+      - name: Restore app source
+        run: |
+          rm -rf lib
+          cp -R "$RUNNER_TEMP/spokenlog_lib" lib
+          cp "$RUNNER_TEMP/spokenlog_pubspec.yaml" pubspec.yaml
+          cp "$RUNNER_TEMP/spokenlog_analysis.yaml" analysis_options.yaml
+          if [ -d "$RUNNER_TEMP/spokenlog_assets" ]; then rm -rf assets; cp -R "$RUNNER_TEMP/spokenlog_assets" assets; fi
+          if [ -d "$RUNNER_TEMP/spokenlog_test" ]; then rm -rf test; cp -R "$RUNNER_TEMP/spokenlog_test" test; fi
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Generate app icons
+        run: dart run flutter_launcher_icons
+
+      - name: Build Android debug
+        run: flutter build apk --debug
+
+      - name: Upload Android build
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpokenLog-Android-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
