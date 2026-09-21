@@ -153,17 +153,38 @@ Large WAV cloud uploads are split only into temporary WAV chunks during transcri
 
 ## Build validation
 
-GitHub Actions validates the shared Flutter code with dependency resolution, static analysis, and tests. Windows release builds are part of the main build path, while Android debug APK compilation is used as a mobile smoke check during pre-release development.
+Use Flutter stable (local setup tested with Flutter 3.47.5). Android builds require an Android SDK and JDK; Windows builds require Windows and Visual Studio's desktop C++ tools. Check the installed toolchains with `flutter doctor`.
+
+### Local setup
+
+Native runners are generated rather than stored in full. The custom `android/app/src/main/AndroidManifest.xml` is kept in the repository because microphone foreground recording needs app-level service declarations.
+
+From a clean checkout, generate the missing runner files before building:
 
 ```text
-flutter pub get
-flutter analyze
-flutter test
-flutter build apk --debug
-flutter build windows --release
+flutter create --no-pub --empty --platforms=android,windows --project-name voice_transcriber .
+git restore -- pubspec.lock
+flutter pub get --enforce-lockfile
+dart run flutter_launcher_icons
 ```
 
-Windows is the currently verified desktop release target. Android is a first-release target, but native APK validation is still being finalized. macOS and iOS are not yet included in official build validation.
+Do not add `--overwrite`: existing app files and the custom Android manifest must be preserved. `--empty` avoids generating Flutter's unrelated counter-app test. Runner creation can replace `pubspec.lock` even with `--no-pub`, so the next command restores the checked-in dependency versions. Do not use that restore command if you have intentional local lockfile changes; back them up first.
+
+Then validate the shared code and build for the available host toolchain:
+
+```text
+flutter analyze --no-fatal-infos
+flutter test
+flutter build apk --debug
+```
+
+On Windows, also run `flutter build windows --release`. CI additionally applies the Windows executable/window branding. Generated runner files and build output are ignored; keep `pubspec.lock` and the custom Android manifest in version control.
+
+### CI and device checks
+
+GitHub Actions analyzes and tests the shared code, builds a Windows release, and compiles an Android debug APK. The current workflow regenerates runners and resolves dependencies afterward; it does not yet preserve the checked-in lockfile across runner generation.
+
+APK compilation and manifest tests do not verify microphone access or background recording on a device. Before distributing an Android build, test recording, pause/resume, screen-off recording, stopping, and permission denial on a device, including Android 14 or later. macOS and iOS are not included in official build validation.
 
 ## Security
 
