@@ -125,13 +125,70 @@ jobs:
       - name: Generate app icons
         run: dart run flutter_launcher_icons
 
-      - name: Build Android debug
-        run: flutter build apk --debug
+      - name: Build Android release APK
+        run: flutter build apk --release
 
       - name: Upload Android build
         uses: actions/upload-artifact@v4
         with:
-          name: SpokenLog-Android-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: SpokenLog-Android
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 7
+
+
+  release:
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+    needs: [build-windows, build-android]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: SpokenLog-Windows
+          path: dist/windows
+
+      - name: Download Android build
+        uses: actions/download-artifact@v4
+        with:
+          name: SpokenLog-Android
+          path: dist/android
+
+      - name: Package release files
+        shell: bash
+        run: |
+          (cd dist/windows && zip -r ../../SpokenLog-Windows-x64.zip .)
+          cp dist/android/app-release.apk SpokenLog-Android.apk
+          sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk > SHA256SUMS.txt
+
+      - name: Create GitHub prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release create v0.1.0-beta.1 \
+            SpokenLog-Windows-x64.zip \
+            SpokenLog-Android.apk \
+            SHA256SUMS.txt \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "SpokenLog v0.1.0-beta.1" \
+            --prerelease \
+            --notes "First public beta build of SpokenLog.
+
+          Downloads:
+          - Windows x64: download SpokenLog-Windows-x64.zip, extract it, and run SpokenLog.exe.
+          - Android: download SpokenLog-Android.apk and install it manually.
+
+          This beta focuses on Windows and Android. macOS and iOS are not included yet because they have not completed native build/device validation.
+
+          Highlights:
+          - Local-first recording library
+          - Local or cloud transcription
+          - Local speaker diarization
+          - Editable transcripts and speaker names
+          - Batch transcription
+          - Screen-off Android recording support
+          - Interrupted recording recovery"
