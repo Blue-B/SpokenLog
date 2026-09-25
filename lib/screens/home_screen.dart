@@ -30,19 +30,28 @@ import '../services/settings_service.dart';
 import '../services/transcript_export_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/transcript_editor_dialog.dart';
+import '../widgets/mobile_library_widgets.dart';
+import '../widgets/app_settings_sheet.dart';
+import '../widgets/cloud_credentials_dialog.dart';
+import '../widgets/recording_details_sheet.dart';
 
 enum _WorkspaceView { records, calendar }
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.recordingService, this.settingsService,
+    this.audioPlayer});
+
+  final RecordingService? recordingService;
+  final SettingsService? settingsService;
+  final AudioPlayer? audioPlayer;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final _recording = RecordingService();
-  final _settings = SettingsService();
+  late final _recording = widget.recordingService ?? RecordingService();
+  late final _settings = widget.settingsService ?? SettingsService();
   final _transcriptExport = TranscriptExportService();
   final _groq = GroqTranscriptionService();
   final _cloudflare = CloudflareTranscriptionService();
@@ -57,8 +66,13 @@ class _HomeScreenState extends State<HomeScreen> {
   late final MoonshineTranscriptionService _moonshine;
   late final WhisperTranscriptionService _whisper;
   late final SpeakerDiarizationService _speakerDiarization;
-  final _player = AudioPlayer();
+  late final _player = widget.audioPlayer ?? AudioPlayer();
   final _searchController = TextEditingController();
+  bool _viewActive = true;
+  final _recordingDetailChanges = ValueNotifier<int>(0);
+  final _detailMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  final _settingsMessengerKey = GlobalKey<ScaffoldMessengerState>();
+  final Set<String> _pendingTranscription = <String>{};
 
   List<RecordingItem> _items = const [];
   List<RecordingCollection> _collections = const [];
@@ -74,6 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String _model = TranscriptionProvider.groq.models.first;
   String? _selectedRecordingId;
   String _libraryScope = 'all';
+  bool get _collectionFolderOpen => _currentCollectionId != null;
+  bool _calendarWeekView = false;
   bool _selectionMode = false;
   final Set<String> _batchSelectedIds = <String>{};
   _WorkspaceView _workspaceView = _WorkspaceView.records;
@@ -118,7 +134,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _speakerDiarization =
         SpeakerDiarizationService(_speakerDiarizationModelManager);
     _initPlayer();
-    _reload();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_reload());
+    });
     unawaited(_loadTranscriptionPreference());
     unawaited(_loadUiPreferences());
   }
@@ -167,22 +185,34 @@ class _HomeScreenState extends State<HomeScreen> {
     return TranscriptionLanguage.auto;
   }
 
+  void _refreshRecordingViews(VoidCallback update) {
+    if (!mounted || !_viewActive) return;
+    setState(update);
+    _recordingDetailChanges.value++;
+  }
+
   void _initPlayer() {
+    // Read the native playback clock rather than estimating elapsed wall time.
+    // Updates do not depend on animation frames in the route behind the modal.
+    _player.positionUpdater = TimerPositionUpdater(
+      getPosition: _player.getCurrentPosition,
+      interval: const Duration(milliseconds: 100),
+    );
     unawaited(_player.setReleaseMode(ReleaseMode.stop));
 
     _positionSubscription = _player.onPositionChanged.listen((position) {
       final item = _activePlayback;
       if (item == null || _draggingPlayback || !mounted) return;
       final globalPosition = _chunkOffset(item, _activeChunkIndex) + position;
-      setState(() => _playbackPosition = globalPosition);
+      _refreshRecordingViews(() => _playbackPosition = globalPosition);
     });
 
     _durationSubscription = _player.onDurationChanged.listen((duration) {
       final item = _activePlayback;
       if (item == null || !mounted) return;
-      setState(() {
+      _refreshRecordingViews(() {
         _activeChunkDuration = duration;
-        if (item.chunks.length == 1 && item.durationMs <= 0) {
+        if (item.chunks.length == 1 && duration > Duration.zero) {
           _playbackTotal = duration;
         }
       });
@@ -190,7 +220,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _stateSubscription = _player.onPlayerStateChanged.listen((state) {
       if (!mounted) return;
-      setState(() => _isPlayingAudio = state == PlayerState.playing);
+      _refreshRecordingViews(() => _isPlayingAudio = state == PlayerState.playing);
     });
 
     _completeSubscription = _player.onPlayerComplete.listen((_) {
@@ -207,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
       final items = await _recording.loadRecordings();
       final collections = await _recording.loadCollections();
       if (!mounted) return;
-      setState(() {
+      _refreshRecordingViews(() {
         _items = items;
         _collections = collections;
         _loading = false;
@@ -408,7 +438,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     var targetMs = target.inMilliseconds;
-    final knownTotalMs = item.duration.inMilliseconds;
+    final knownTotalMs = _activePlayback?.id == item.id &&
+            _playbackTotal > Duration.zero
+        ? _playbackTotal.inMilliseconds : item.duration.inMilliseconds;
     if (knownTotalMs > 0) {
       targetMs = targetMs.clamp(0, knownTotalMs).toInt();
     } else if (targetMs < 0) {
@@ -422,12 +454,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await _player.stop();
     if (!mounted) return;
-    setState(() {
+    _refreshRecordingViews(() {
       _activePlayback = item;
       _activeChunkIndex = resolved.chunkIndex;
       _activeChunkDuration = Duration.zero;
       _playbackPosition = Duration(milliseconds: targetMs);
-      _playbackTotal = item.duration;
+      _playbackTotal = Duration(milliseconds: knownTotalMs);
       _draggingPlayback = false;
       _dragPosition = Duration.zero;
     });
@@ -454,12 +486,13 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (mounted) {
-      setState(() {
+      _refreshRecordingViews(() {
         _activePlayback = item;
         _activeChunkIndex = index;
         _activeChunkDuration = Duration.zero;
         _playbackPosition = _chunkOffset(item, index) + position;
-        if (item.durationMs > 0) {
+        if (item.durationMs > 0 && (item.chunks.length > 1 ||
+            _playbackTotal <= Duration.zero)) {
           _playbackTotal = item.duration;
         }
       });
@@ -492,7 +525,7 @@ class _HomeScreenState extends State<HomeScreen> {
               : Duration(
                   milliseconds: item.chunks[_activeChunkIndex].durationMs,
                 ));
-      setState(() {
+      _refreshRecordingViews(() {
         _isPlayingAudio = false;
         _playbackPosition =
             _playbackTotal > Duration.zero ? _playbackTotal : fallbackEnd;
@@ -516,7 +549,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      setState(() {
+      _refreshRecordingViews(() {
         _draggingPlayback = false;
         _playbackPosition = target;
       });
@@ -527,7 +560,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _setPlaybackRate(double value) async {
-    setState(() => _playbackRate = value);
+    _refreshRecordingViews(() => _playbackRate = value);
     if (_activePlayback != null) {
       try {
         await _player.setPlaybackRate(value);
@@ -540,7 +573,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _stopPlayback() async {
     await _player.stop();
     if (!mounted) return;
-    setState(() {
+    _refreshRecordingViews(() {
       _activePlayback = null;
       _activeChunkIndex = 0;
       _activeChunkDuration = Duration.zero;
@@ -557,8 +590,54 @@ class _HomeScreenState extends State<HomeScreen> {
     TranscriptionProvider? providerOverride,
     bool announceCompletion = true,
   }) async {
+    if (_pendingTranscription.contains(item.id) ||
+        _transcribing.contains(item.id) || item.isDeleted) return;
+    _refreshRecordingViews(() => _pendingTranscription.add(item.id));
+    try {
+      await _performTranscription(item,
+          providerOverride: providerOverride,
+          announceCompletion: announceCompletion);
+    } catch (_) {
+      _message(_t('전사를 준비하지 못했습니다. 연결 설정을 확인해 주세요.',
+          'Could not prepare transcription. Check your connection settings.'),
+          error: true);
+    } finally {
+      _refreshRecordingViews(() => _pendingTranscription.remove(item.id));
+    }
+  }
+
+  Future<void> _performTranscription(
+    RecordingItem item, {
+    TranscriptionProvider? providerOverride,
+    bool announceCompletion = true,
+  }) async {
     final provider = providerOverride ?? await _settings.getProvider();
-    final language = await _settings.getTranscriptionLanguage();
+    var language = await _settings.getTranscriptionLanguage();
+    if (!mounted) return;
+    if (provider.needsKoreanConfirmation(language)) {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: Text(_t('한국어로 전사할까요?', 'Transcribe as Korean?')),
+          content: Text(_t(
+            'Moonshine KO는 한국어 전용이며 언어를 자동으로 판별하지 않습니다. '
+            '이 녹음이 한국어라면 그대로 전사할 수 있습니다. '
+            '여러 언어를 자동 감지하려면 SenseVoice나 Whisper를 선택해 주세요.',
+            'Moonshine KO recognizes Korean only; it does not detect the language. '
+            'Continue for a Korean recording, or use SenseVoice or Whisper for automatic language detection.',
+          )),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
+                child: Text(_t('취소', 'Cancel'))),
+            FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
+                child: Text(_t('한국어로 전사', 'Transcribe as Korean'))),
+          ],
+        ),
+      );
+      if (confirmed != true || !mounted) return;
+      // This applies only to this request; keep the saved auto preference.
+      language = provider.effectiveLanguage(language, koreanConfirmed: true)!;
+    }
     final model = await _settings.getModel(provider);
 
     if (!provider.supportsLanguage(language)) {
@@ -576,11 +655,11 @@ class _HomeScreenState extends State<HomeScreen> {
     if (provider.requiresApiKey) {
       apiKey = await _settings.getApiKey(provider);
       if (apiKey == null || apiKey.trim().isEmpty) {
-        _message(
-          '설정에서 ${provider.label} 인증 정보를 먼저 등록해 주세요.',
-          error: true,
-        );
-        return;
+        final saved = await _showCloudCredentials(provider,
+            resumeTranscription: true);
+        if (!saved || !mounted) return;
+        apiKey = await _settings.getApiKey(provider);
+        if (apiKey == null || apiKey.trim().isEmpty) return;
       }
     }
 
@@ -588,17 +667,19 @@ class _HomeScreenState extends State<HomeScreen> {
       cloudflareAccountId = await _settings.getCloudflareAccountId();
       if (cloudflareAccountId == null ||
           cloudflareAccountId.trim().isEmpty) {
-        _message(
-          '설정에서 Cloudflare Account ID를 먼저 등록해 주세요.',
-          error: true,
-        );
-        return;
+        final saved = await _showCloudCredentials(provider,
+            resumeTranscription: true);
+        if (!saved || !mounted) return;
+        cloudflareAccountId = await _settings.getCloudflareAccountId();
+        apiKey = await _settings.getApiKey(provider);
+        if (cloudflareAccountId == null || cloudflareAccountId.trim().isEmpty ||
+            apiKey == null || apiKey.trim().isEmpty) return;
       }
     }
 
-    setState(() {
+    if (!mounted) return;
+    _refreshRecordingViews(() {
       _provider = provider;
-      _language = language;
       _model = model;
       _transcribing.add(item.id);
       _transcribingProgress[item.id] = provider.isLocal
@@ -611,7 +692,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       void progress(int completed, int total) {
         if (!mounted) return;
-        setState(() {
+        _refreshRecordingViews(() {
           _transcribingProgress[item.id] =
               '$completed / $total 조각 전사 완료';
         });
@@ -664,7 +745,7 @@ class _HomeScreenState extends State<HomeScreen> {
         } else {
           try {
             if (mounted) {
-              setState(() {
+              _refreshRecordingViews(() {
                 _transcribingProgress[item.id] =
                     '로컬에서 화자를 구분하고 있습니다.';
               });
@@ -676,7 +757,7 @@ class _HomeScreenState extends State<HomeScreen> {
               numSpeakers: speakerCount,
               onProgress: (value) {
                 if (!mounted) return;
-                setState(() {
+                _refreshRecordingViews(() {
                   _transcribingProgress[item.id] =
                       '화자 구분 ${(value * 100).round()}%';
                 });
@@ -748,7 +829,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _message('전사 중 예상하지 못한 오류가 발생했습니다: $e', error: true);
     } finally {
       if (mounted) {
-        setState(() {
+        _refreshRecordingViews(() {
           _transcribing.remove(item.id);
           _transcribingProgress.remove(item.id);
         });
@@ -756,7 +837,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (fallback != null && mounted) {
-      await _transcribe(
+      await _performTranscription(
         item,
         providerOverride: fallback,
         announceCompletion: announceCompletion,
@@ -1140,6 +1221,73 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Future<bool> _showCloudCredentials(
+    TranscriptionProvider provider, {
+    bool resumeTranscription = false,
+  }) async {
+    final key = await _settings.getApiKey(provider) ?? '';
+    final accountId = provider == TranscriptionProvider.cloudflare
+        ? await _settings.getCloudflareAccountId() ?? '' : '';
+    if (!mounted) return false;
+    final saved = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => CloudCredentialsDialog(
+        providerName: provider.shortLabel,
+        initialKey: key,
+        initialAccountId: accountId,
+        needsAccountId: provider == TranscriptionProvider.cloudflare,
+        resumeTranscription: resumeTranscription,
+        useEnglish: _useEnglish,
+        onSave: (value, account) async {
+          if (provider == TranscriptionProvider.cloudflare) {
+            await _settings.setCloudflareAccountId(account);
+          }
+          await _settings.setApiKey(provider, value);
+        },
+      ),
+    );
+    if (saved == true) {
+      _refreshRecordingViews(() {});
+      if (!resumeTranscription) {
+        _message(_t('인증 정보를 저장했습니다.', 'Credentials saved.'));
+      }
+    }
+    return saved == true;
+  }
+
+  Future<void> _showAppSettings() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.86,
+        child: ScaffoldMessenger(
+          key: _settingsMessengerKey,
+          child: Scaffold(
+            backgroundColor: Theme.of(sheetContext).colorScheme.surface,
+            body: ListenableBuilder(
+              listenable: _recordingDetailChanges,
+              builder: (_, _) => !mounted || !_viewActive
+                  ? const SizedBox.shrink() : AppSettingsSheet(
+                useEnglish: _useEnglish,
+                onGroq: () => unawaited(_showCloudCredentials(TranscriptionProvider.groq)),
+                onCloudflare: () => unawaited(_showCloudCredentials(TranscriptionProvider.cloudflare)),
+                onLocalModels: () => unawaited(_openSettings(
+                    initialProvider: _provider.isLocal
+                        ? _provider : TranscriptionProvider.localSenseVoice)),
+                onTranscription: () => unawaited(_openSettings()),
+                onDisplayLanguage: () => unawaited(_showLanguageSettings()),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _showLanguageSettings() async {
     var value = await _settings.getAppLanguage();
     if (!mounted) return;
@@ -1208,7 +1356,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (saved != null) {
       await _settings.setAppLanguage(saved);
       if (!mounted) return;
-      setState(() => _appLanguage = saved);
+      _refreshRecordingViews(() => _appLanguage = saved);
     }
   }
 
@@ -1256,10 +1404,14 @@ class _HomeScreenState extends State<HomeScreen> {
     var obscureKey = true;
     String? downloadingTask;
     double? modelProgress;
+    String? settingsNotice;
+    bool settingsNoticeIsError = false;
 
-    if (!provider.supportsLanguage(language)) {
-      provider = TranscriptionProvider.groq;
-      showLocalProviders = false;
+    if (!provider.supportsLanguage(language) &&
+        !(provider == TranscriptionProvider.localMoonshine &&
+            language == TranscriptionLanguage.auto)) {
+      // Opening a model's settings must not silently jump to a cloud provider.
+      language = _compatibleLanguage(provider, language);
     }
 
     final hasKey = <TranscriptionProvider, bool>{
@@ -1286,8 +1438,8 @@ class _HomeScreenState extends State<HomeScreen> {
           final compactContentHeight = (
             dialogSize.height -
             MediaQuery.paddingOf(dialogContext).vertical -
-            168
-          ).clamp(320.0, 760.0).toDouble();
+            MediaQuery.viewInsetsOf(dialogContext).bottom - 220
+          ).clamp(120.0, 760.0).toDouble();
 
           if (!settingsScrollInitialized) {
             settingsScrollInitialized = true;
@@ -1295,6 +1447,14 @@ class _HomeScreenState extends State<HomeScreen> {
               if (settingsScrollController.hasClients) {
                 settingsScrollController.jumpTo(0);
               }
+            });
+          }
+
+          void notice(String message, {bool error = false}) {
+            if (!dialogContext.mounted) return;
+            setLocalState(() {
+              settingsNotice = message;
+              settingsNoticeIsError = error;
             });
           }
 
@@ -1356,9 +1516,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   return;
               }
 
-              _message('${target.shortLabel} 모델 설치가 완료되었습니다.');
+              notice('${target.shortLabel} 모델 설치가 완료되었습니다.');
             } catch (e) {
-              _message(
+              notice(
                 '${target.shortLabel} 모델 다운로드에 실패했습니다: $e',
                 error: true,
               );
@@ -1410,9 +1570,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
               if (!dialogContext.mounted) return;
               setLocalState(() => diarizationInstalled = true);
-              _message('로컬 화자 구분 모델 설치가 완료되었습니다.');
+              notice('로컬 화자 구분 모델 설치가 완료되었습니다.');
             } catch (e) {
-              _message(
+              notice(
                 '화자 구분 모델 다운로드에 실패했습니다: $e',
                 error: true,
               );
@@ -1625,7 +1785,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
           Widget providerCard(TranscriptionProvider value) {
             final selected = value == provider;
-            final supported = value.supportsLanguage(language);
+            final needsKoreanConfirmation =
+                value == TranscriptionProvider.localMoonshine &&
+                language == TranscriptionLanguage.auto;
+            final supported = value.supportsLanguage(language) ||
+                needsKoreanConfirmation;
             final installed =
                 value.isLocal ? localInstalled(value) : null;
 
@@ -1915,6 +2079,15 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(_t('음성 인식 설정', 'Speech recognition settings')),
+                if (settingsNotice != null) ...[
+                  const SizedBox(height: 8),
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(settingsNotice!,
+                      style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
+                        color: settingsNoticeIsError ? scheme.error : scheme.primary)),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   _t(
@@ -1961,7 +2134,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               if (value == null) return;
                               setLocalState(() {
                                 language = value;
-                                if (!provider.supportsLanguage(language)) {
+                                if (!provider.supportsLanguage(language) &&
+                                    !(provider == TranscriptionProvider.localMoonshine &&
+                                      language == TranscriptionLanguage.auto)) {
                                   final candidates = TranscriptionProvider.values
                                       .where(
                                         (candidate) =>
@@ -1985,8 +2160,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 7),
                     Text(
-                      '자동 감지는 Groq, Cloudflare, SenseVoice, Local Whisper에서 사용할 수 있습니다. '
-                      '언어를 알고 있다면 직접 선택하면 인식 안정성에 도움이 될 수 있습니다.',
+                      provider == TranscriptionProvider.localMoonshine
+                          ? _t('Moonshine KO는 한국어 전용입니다. 자동 감지로 설정해도 '
+                              '실행 전에 한국어로 전사할지 확인하며, 다른 언어를 자동 판별하지 않습니다.',
+                              'Moonshine KO is Korean-only. With Auto selected, you must confirm Korean before transcription; other languages are not detected.')
+                          : _t('자동 감지는 선택한 모델이 지원하는 언어 안에서 동작합니다. '
+                              '언어를 알고 있다면 직접 선택할 수 있습니다.',
+                              'Auto detection works within the selected model’s supported languages. You can also choose the spoken language explicitly.'),
                       style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -2236,7 +2416,7 @@ class _HomeScreenState extends State<HomeScreen> {
           : provider.models.first;
 
       if (mounted) {
-        setState(() {
+        _refreshRecordingViews(() {
           _provider = provider;
           _language = language;
           _model = selectedModel;
@@ -2254,20 +2434,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _rename(RecordingItem item) async {
-    final controller = TextEditingController(text: item.title ?? '');
+    var title = item.title ?? '';
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('녹음 이름 변경'),
-        content: TextField(
-          controller: controller,
+        content: TextFormField(
+          initialValue: title,
+          onChanged: (value) => title = value,
           autofocus: true,
           maxLength: 80,
           decoration: const InputDecoration(
             hintText: '예: 주간 회의',
             prefixIcon: Icon(Icons.edit_outlined),
           ),
-          onSubmitted: (value) => Navigator.pop(context, value),
+          onFieldSubmitted: (value) => Navigator.pop(context, value),
         ),
         actions: [
           TextButton(
@@ -2275,14 +2456,12 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Text('취소'),
           ),
           FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
+            onPressed: () => Navigator.pop(context, title),
             child: const Text('저장'),
           ),
         ],
       ),
     );
-    controller.dispose();
-
     if (result == null) return;
     await _recording.renameRecording(item, result);
     await _reload();
@@ -2414,6 +2593,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_libraryScope == 'favorites') {
       return _t('즐겨찾기', 'Favorites');
     }
+    if (_libraryScope == 'collections') {
+      return _t('보관함', 'Collections');
+    }
     if (_libraryScope == 'trash') {
       return _t('휴지통', 'Trash');
     }
@@ -2432,6 +2614,32 @@ class _HomeScreenState extends State<HomeScreen> {
       if (collection.id == id) return collection;
     }
     return null;
+  }
+
+  String? get _currentCollectionId =>
+      _libraryScope.startsWith('collection:')
+          ? _libraryScope.substring('collection:'.length)
+          : null;
+
+  int _collectionRecordingCount(String collectionId) =>
+      _items
+          .where((item) => !item.isDeleted && item.collectionId == collectionId)
+          .length;
+
+  void _openCollection(String collectionId) {
+    if (_collectionById(collectionId) == null) return;
+    _clearBatchSelection();
+    setState(() {
+      _libraryScope = 'collection:$collectionId';
+      _workspaceView = _WorkspaceView.records;
+    });
+  }
+
+  void _closeCollectionFolder() {
+    _clearBatchSelection();
+    setState(() {
+      _libraryScope = 'collections';
+    });
   }
 
   TranscriptSegment? _searchMatchSegment(RecordingItem item) {
@@ -2622,8 +2830,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _message(String text, {bool error = false}) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
+    final messenger = _settingsMessengerKey.currentState ??
+        _detailMessengerKey.currentState ?? ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
       SnackBar(
+        behavior: SnackBarBehavior.floating,
         content: Text(text.replaceFirst('Exception: ', '')),
         backgroundColor: error ? Theme.of(context).colorScheme.error : null,
       ),
@@ -2728,7 +2940,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     await _recording.deleteCollection(collection.id);
     if (!mounted) return;
-    setState(() => _libraryScope = 'all');
+    setState(() {
+      _libraryScope = 'collections';
+    });
     await _reload();
   }
 
@@ -3107,7 +3321,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Spacer(),
                   IconButton.filledTonal(
                     tooltip: _t('표시 언어', 'Display language'),
-                    onPressed: () => unawaited(_showLanguageSettings()),
+                    onPressed: () => unawaited(_showAppSettings()),
                     icon: const Icon(Icons.settings_outlined),
                   ),
                 ],
@@ -3465,10 +3679,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
     Widget positionSlider() {
       return Slider(
+        key: ValueKey('playback-slider-${item.id}'),
         value: ratio,
         onChangeStart: active && totalMs > 0 && !_isRecording
             ? (value) {
-                setState(() {
+                _refreshRecordingViews(() {
                   _draggingPlayback = true;
                   _dragPosition = Duration(
                     milliseconds: (totalMs * value).round(),
@@ -3478,7 +3693,7 @@ class _HomeScreenState extends State<HomeScreen> {
             : null,
         onChanged: active && totalMs > 0 && !_isRecording
             ? (value) {
-                setState(() {
+                _refreshRecordingViews(() {
                   _dragPosition = Duration(
                     milliseconds: (totalMs * value).round(),
                   );
@@ -3550,7 +3765,10 @@ class _HomeScreenState extends State<HomeScreen> {
               _buildWaveform(item, progress: ratio),
               if (item.audioPaths.isNotEmpty) const SizedBox(height: 4),
               if (compact) ...[
-                Row(
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 4,
+                  runSpacing: 4,
                   children: [
                     IconButton.filled(
                       tooltip:
@@ -3582,7 +3800,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 .labelMedium
                                 ?.copyWith(color: scheme.onSurfaceVariant),
                           ),
-                    const Spacer(),
                     ratePicker(),
                   ],
                 ),
@@ -3776,7 +3993,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildRecordingCard(RecordingItem item) {
     final scheme = Theme.of(context).colorScheme;
-    final busy = _transcribing.contains(item.id);
+    final busy = _transcribing.contains(item.id) ||
+        _pendingTranscription.contains(item.id);
     final active = _activePlayback?.id == item.id;
     final durationText =
         item.durationMs > 0 ? formatDuration(item.duration) : '길이 확인 중';
@@ -4069,6 +4287,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   FilledButton.icon(
+                    key: ValueKey('transcribe-${item.id}'),
                     onPressed: busy ? null : () => _transcribe(item),
                     icon: busy
                         ? const SizedBox.square(
@@ -4083,6 +4302,11 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? _t('다시 전사', 'Transcribe again')
                               : _provider.shortLabel + _t('로 전사', ' transcription'),
                     ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: busy ? null : () => unawaited(_showAppSettings()),
+                    icon: const Icon(Icons.settings_outlined, size: 18),
+                    label: Text(_t('전사 설정', 'Transcription settings')),
                   ),
                   if (item.hasTranscript)
                     OutlinedButton.icon(
@@ -4388,10 +4612,23 @@ class _HomeScreenState extends State<HomeScreen> {
       useSafeArea: true,
       showDragHandle: true,
       backgroundColor: Theme.of(context).colorScheme.surface,
-      builder: (context) => SizedBox(
-        height: MediaQuery.sizeOf(context).height * 0.9,
-        child: SingleChildScrollView(
-          child: _buildRecordingCard(item),
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.9,
+        child: RecordingDetailsSheet(
+          changes: _recordingDetailChanges,
+          messengerKey: _detailMessengerKey,
+          useEnglish: _useEnglish,
+          builder: (_) {
+            if (!mounted || !_viewActive) return const SizedBox.shrink();
+            final latest = _items.where((entry) => entry.id == item.id);
+            if (latest.isEmpty) {
+              return Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(_t('이 녹음은 삭제되었습니다.', 'This recording was deleted.')),
+              );
+            }
+            return _buildRecordingCard(latest.first);
+          },
         ),
       ),
     );
@@ -4693,7 +4930,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.language_rounded,
             label: _t('표시 언어', 'Display language'),
             selected: false,
-            onTap: () => unawaited(_showLanguageSettings()),
+            onTap: () => unawaited(_showAppSettings()),
           ),
           navItem(
             icon: Icons.tune_rounded,
@@ -4841,449 +5078,325 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildCalendarRecordingTile(RecordingItem item) {
-    final scheme = Theme.of(context).colorScheme;
     final duration =
         item.durationMs > 0 ? formatDuration(item.duration) : '--:--';
 
-    return Card(
-      margin: const EdgeInsets.only(bottom: 8),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: () {
-          setState(() {
-            _selectedRecordingId = item.id;
-            _workspaceView = _WorkspaceView.records;
-          });
-        },
-        onLongPress: () => unawaited(_showRecordingActions(item)),
-        onDoubleTap: () => unawaited(_rename(item)),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(13, 11, 8, 11),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHigh,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  item.hasTranscript
-                      ? Icons.description_outlined
-                      : Icons.graphic_eq_rounded,
-                  color: scheme.primary,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      item.displayTitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      '${formatRecordingDate(item.createdAt)} · $duration',
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      _recordingPreview(item),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                            height: 1.35,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              PopupMenuButton<String>(
-                tooltip: _t('기록 메뉴', 'Recording menu'),
-                onSelected: (action) {
-                  switch (action) {
-                    case 'rename':
-                      unawaited(_rename(item));
-                      break;
-                    case 'reveal':
-                      unawaited(_revealInFolder(item));
-                      break;
-                    case 'delete':
-                      unawaited(_confirmDelete(item));
-                      break;
-                  }
-                },
-                itemBuilder: (_) => [
-                  PopupMenuItem(
-                    value: 'rename',
-                    child: Row(
-                      children: [
-                        const Icon(Icons.edit_outlined, size: 18),
-                        const SizedBox(width: 9),
-                        Text(_t('이름 변경', 'Rename')),
-                      ],
-                    ),
-                  ),
-                  if (Platform.isWindows)
-                    PopupMenuItem(
-                      value: 'reveal',
-                      child: Row(
-                        children: [
-                          const Icon(Icons.folder_open_outlined, size: 18),
-                          const SizedBox(width: 9),
-                          Text(_t('파일 위치 열기', 'Show in folder')),
-                        ],
-                      ),
-                    ),
-                  PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.delete_outline_rounded,
-                          size: 18,
-                          color: scheme.error,
-                        ),
-                        const SizedBox(width: 9),
-                        Text(
-                          _t('삭제', 'Delete'),
-                          style: TextStyle(color: scheme.error),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
+    return CalendarAgendaRecordingTile(
+      title: item.displayTitle,
+      metaLabel: '${formatRecordingDate(item.createdAt.toLocal())} · $duration',
+      preview: _recordingPreview(item),
+      hasTranscript: item.hasTranscript,
+      maxPreviewLines: 4,
+      onTap: () {
+        setState(() {
+          _selectedRecordingId = item.id;
+          _workspaceView = _WorkspaceView.records;
+        });
+      },
+      onLongPress: () => unawaited(_showRecordingActions(item)),
+      onDoubleTap: () => unawaited(_rename(item)),
+      menuTooltip: _t('기록 메뉴', 'Recording menu'),
+      renameLabel: _t('이름 변경', 'Rename'),
+      deleteLabel: _t('삭제', 'Delete'),
+      onRename: () => unawaited(_rename(item)),
+      onDelete: () => unawaited(_confirmDelete(item)),
+      revealLabel: Platform.isWindows ? _t('파일 위치 열기', 'Show in folder') : null,
+      onReveal: Platform.isWindows ? () => unawaited(_revealInFolder(item)) : null,
     );
   }
 
   Widget _buildCalendarWorkspace() {
     final scheme = Theme.of(context).colorScheme;
-    final first = DateTime(_calendarMonth.year, _calendarMonth.month, 1);
-    final days =
+    final localNow = DateTime.now();
+    final selectedDate = _selectedCalendarDate;
+    final selectedItems = _itemsForDate(selectedDate);
+    final daysInMonth =
         DateTime(_calendarMonth.year, _calendarMonth.month + 1, 0).day;
-    final leading = first.weekday % 7;
-    final selectedItems = _itemsForDate(_selectedCalendarDate);
+    final itemCounts = <int, int>{
+      for (var day = 1; day <= daysInMonth; day++)
+        day: _itemsForDate(
+          DateTime(_calendarMonth.year, _calendarMonth.month, day),
+        ).length,
+    };
+    final sameDisplayedMonth = selectedDate.year == _calendarMonth.year &&
+        selectedDate.month == _calendarMonth.month;
+    final selectedDay = sameDisplayedMonth ? selectedDate.day : null;
+    final todayDay =
+        localNow.year == _calendarMonth.year && localNow.month == _calendarMonth.month
+            ? localNow.day
+            : null;
     final weekdays = _useEnglish
         ? const ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
         : const ['일', '월', '화', '수', '목', '금', '토'];
+    final weekdayNames = _useEnglish
+        ? const [
+            'Sunday',
+            'Monday',
+            'Tuesday',
+            'Wednesday',
+            'Thursday',
+            'Friday',
+            'Saturday',
+          ]
+        : const ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
 
-    Widget dayCell(int day) {
-      final date = DateTime(_calendarMonth.year, _calendarMonth.month, day);
-      final dayItems = _itemsForDate(date);
-      final count = dayItems.length;
-      final selected = _sameDay(date, _selectedCalendarDate);
-      final today = _sameDay(date, DateTime.now());
+    String two(int value) => value.toString().padLeft(2, '0');
 
-      return Padding(
-        padding: const EdgeInsets.all(3),
-        child: Material(
-          color: selected
-              ? scheme.primaryContainer
-              : today
-                  ? scheme.surfaceContainerHigh
-                  : Colors.transparent,
-          borderRadius: BorderRadius.circular(11),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(11),
-            onTap: () => setState(() => _selectedCalendarDate = date),
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(
-                  color: selected
-                      ? scheme.primary.withValues(alpha: 0.55)
-                      : scheme.outlineVariant.withValues(alpha: 0.45),
-                ),
-              ),
-              padding: const EdgeInsets.all(8),
-              child: LayoutBuilder(
-                builder: (context, cellConstraints) {
-                  final compactCell = cellConstraints.maxWidth < 78;
-                  final previewCount = count == 0
-                      ? 0
-                      : (compactCell ? 1 : count.clamp(1, 2).toInt());
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            day.toString(),
-                            style:
-                                Theme.of(context).textTheme.labelLarge?.copyWith(
-                                      fontWeight: selected || today
-                                          ? FontWeight.w800
-                                          : FontWeight.w600,
-                                      color: selected
-                                          ? scheme.onPrimaryContainer
-                                          : null,
-                                    ),
-                          ),
-                          const Spacer(),
-                          if (count > 0 && compactCell)
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: selected
-                                    ? scheme.primary
-                                    : scheme.primary.withValues(alpha: 0.8),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                        ],
+    // Local-time date display for the selected agenda day.
+    final selectedDateLabel = _useEnglish
+        ? '${selectedDate.year}-${two(selectedDate.month)}-${two(selectedDate.day)} '
+            '(${weekdayNames[selectedDate.weekday % 7]})'
+        : '${selectedDate.year}년 ${selectedDate.month}월 ${selectedDate.day}일 '
+            '${weekdayNames[selectedDate.weekday % 7]}';
+
+    Widget agendaHeader() {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  selectedDateLabel,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
                       ),
-                      if (previewCount > 0) ...[
-                        const SizedBox(height: 5),
-                        ...dayItems.take(previewCount).map(
-                          (recording) => Padding(
-                            padding: const EdgeInsets.only(bottom: 2),
-                            child: Text(
-                              recording.displayTitle,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .labelSmall
-                                  ?.copyWith(
-                                    fontSize: compactCell ? 9 : 10,
-                                    height: 1.15,
-                                    color: selected
-                                        ? scheme.onPrimaryContainer
-                                        : scheme.onSurfaceVariant,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      const Spacer(),
-                      if (count > previewCount)
-                        Text(
-                          '+${count - previewCount}',
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: selected
-                                        ? scheme.onPrimaryContainer
-                                        : scheme.primary,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                        )
-                      else if (count > 0 && !compactCell)
-                        Align(
-                          alignment: Alignment.bottomRight,
-                          child: Text(
-                            _t('${count}개', '${count}'),
-                            style:
-                                Theme.of(context).textTheme.labelSmall?.copyWith(
-                                      color: selected
-                                          ? scheme.onPrimaryContainer
-                                          : scheme.primary,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  _useEnglish
+                      ? '${selectedItems.length} recordings'
+                      : '${selectedItems.length}개의 기록',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
             ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: scheme.surfaceContainerHigh,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${selectedItems.length}',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w800,
+                  ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget agendaEmpty() {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.event_available_outlined,
+                size: 30,
+                color: scheme.onSurfaceVariant,
+              ),
+              const SizedBox(height: 10),
+              Text(
+                _t(
+                  '이 날짜에는 기록이 없습니다.',
+                  'No recordings on this date.',
+                ),
+                textAlign: TextAlign.center,
+                style: TextStyle(color: scheme.onSurfaceVariant),
+              ),
+            ],
           ),
         ),
       );
     }
 
-    final calendar = Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(18, 16, 18, 18),
-        child: Column(
-          children: [
-            Row(
-              children: [
-                IconButton(
-                  tooltip: _t('이전 달', 'Previous month'),
-                  onPressed: () {
-                    setState(() {
-                      _calendarMonth = DateTime(
-                        _calendarMonth.year,
-                        _calendarMonth.month - 1,
-                      );
-                    });
-                  },
-                  icon: const Icon(Icons.chevron_left_rounded),
-                ),
-                Expanded(
-                  child: Text(
-                    _useEnglish
-                        ? _calendarMonth.year.toString() +
-                            '.' +
-                            _calendarMonth.month.toString().padLeft(2, '0')
-                        : _calendarMonth.year.toString() +
-                            '년 ' +
-                            _calendarMonth.month.toString() +
-                            '월',
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () {
-                    final now = DateTime.now();
-                    setState(() {
-                      _calendarMonth = DateTime(now.year, now.month);
-                      _selectedCalendarDate = now;
-                    });
-                  },
-                  child: Text(_t('오늘', 'Today')),
-                ),
-                IconButton(
-                  tooltip: _t('다음 달', 'Next month'),
-                  onPressed: () {
-                    setState(() {
-                      _calendarMonth = DateTime(
-                        _calendarMonth.year,
-                        _calendarMonth.month + 1,
-                      );
-                    });
-                  },
-                  icon: const Icon(Icons.chevron_right_rounded),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: weekdays
-                  .map(
-                    (label) => Expanded(
-                      child: Text(
-                        label,
-                        textAlign: TextAlign.center,
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: scheme.onSurfaceVariant,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                    ),
-                  )
-                  .toList(),
-            ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: GridView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: leading + days,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 7,
-                  childAspectRatio: 0.92,
-                ),
-                itemBuilder: (context, index) {
-                  if (index < leading) return const SizedBox.shrink();
-                  return dayCell(index - leading + 1);
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    Widget calendarCard({required bool bounded}) {
+      final grid = CalendarMonthGridView(
+        year: _calendarMonth.year,
+        month: _calendarMonth.month,
+        weekdays: weekdays,
+        selectedDay: selectedDay,
+        todayDay: todayDay,
+        itemCounts: itemCounts,
+        weekOnly: _calendarWeekView,
+        cellAspectRatio: 1.12,
+        onDaySelected: (day) => setState(() {
+          _selectedCalendarDate =
+              DateTime(_calendarMonth.year, _calendarMonth.month, day);
+        }),
+      );
 
-    final dayList = Card(
-      margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(15, 15, 15, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              _useEnglish
-                  ? _selectedCalendarDate.year.toString() +
-                      '-' +
-                      _selectedCalendarDate.month
-                          .toString()
-                          .padLeft(2, '0') +
-                      '-' +
-                      _selectedCalendarDate.day.toString().padLeft(2, '0')
-                  : _selectedCalendarDate.month.toString() +
-                      '월 ' +
-                      _selectedCalendarDate.day.toString() +
-                      '일',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
+      return Card(
+        margin: EdgeInsets.zero,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          child: Column(
+            mainAxisSize: bounded ? MainAxisSize.max : MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  IconButton(
+                    tooltip: _t('이전 달', 'Previous month'),
+                    onPressed: () {
+                      setState(() {
+                        _calendarMonth = DateTime(
+                          _calendarMonth.year,
+                          _calendarMonth.month - 1,
+                        );
+                        final lastDay = DateTime(_calendarMonth.year,
+                            _calendarMonth.month + 1, 0).day;
+                        _selectedCalendarDate = DateTime(_calendarMonth.year,
+                            _calendarMonth.month,
+                            _selectedCalendarDate.day.clamp(1, lastDay));
+                      });
+                    },
+                    icon: const Icon(Icons.chevron_left_rounded),
                   ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              _useEnglish
-                  ? selectedItems.length.toString() + ' recordings'
-                  : selectedItems.length.toString() + '개의 기록',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: scheme.onSurfaceVariant,
-                  ),
-            ),
-            const SizedBox(height: 10),
-            Expanded(
-              child: selectedItems.isEmpty
-                  ? Center(
-                      child: Text(
-                        _t(
-                          '이 날짜에는 기록이 없습니다.',
-                          'No recordings on this date.',
-                        ),
-                        style: TextStyle(color: scheme.onSurfaceVariant),
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: selectedItems.length,
-                      itemBuilder: (context, index) {
-                        final item = selectedItems[index];
-                        return _buildCalendarRecordingTile(item);
-                      },
+                  Expanded(
+                    child: Text(
+                      _useEnglish
+                          ? _calendarMonth.year.toString() +
+                              '.' +
+                              _calendarMonth.month.toString().padLeft(2, '0')
+                          : _calendarMonth.year.toString() +
+                              '년 ' +
+                              _calendarMonth.month.toString() +
+                              '월',
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
                     ),
-            ),
-          ],
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      final now = DateTime.now();
+                      setState(() {
+                        _calendarMonth = DateTime(now.year, now.month);
+                        _selectedCalendarDate = now;
+                      });
+                    },
+                    child: Text(_t('오늘', 'Today')),
+                  ),
+                  IconButton(
+                    tooltip: _t('다음 달', 'Next month'),
+                    onPressed: () {
+                      setState(() {
+                        _calendarMonth = DateTime(
+                          _calendarMonth.year,
+                          _calendarMonth.month + 1,
+                        );
+                        final lastDay = DateTime(_calendarMonth.year,
+                            _calendarMonth.month + 1, 0).day;
+                        _selectedCalendarDate = DateTime(_calendarMonth.year,
+                            _calendarMonth.month,
+                            _selectedCalendarDate.day.clamp(1, lastDay));
+                      });
+                    },
+                    icon: const Icon(Icons.chevron_right_rounded),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              if (bounded)
+                Expanded(child: SingleChildScrollView(child: grid))
+              else
+                grid,
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () => setState(
+                    () => _calendarWeekView = !_calendarWeekView,
+                  ),
+                  icon: Icon(
+                    _calendarWeekView
+                        ? Icons.calendar_view_month_rounded
+                        : Icons.view_week_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    _calendarWeekView
+                        ? _t('월 보기', 'Month view')
+                        : _t('주 보기', 'Week view'),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    }
+
+    final agendaItems = <Widget>[
+      for (final item in selectedItems) _buildCalendarRecordingTile(item),
+    ];
 
     return Padding(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       child: LayoutBuilder(
         builder: (context, constraints) {
+          // Wide: month on the left, wide agenda on the right.
           if (constraints.maxWidth >= 760) {
             return Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Expanded(flex: 3, child: calendar),
+                Expanded(flex: 3, child: calendarCard(bounded: true)),
                 const SizedBox(width: 14),
-                Expanded(flex: 2, child: dayList),
+                Expanded(
+                  flex: 2,
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(15, 15, 15, 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          agendaHeader(),
+                          const SizedBox(height: 10),
+                          Expanded(
+                            child: selectedItems.isEmpty
+                                ? agendaEmpty()
+                                : ListView(
+                                    children: agendaItems,
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ],
             );
           }
-          return Column(
+
+          // Narrow phones: a single scrollable column. The month grid stays
+          // compact for dates/dots while the agenda below gets the full width
+          // for long Korean titles and multi-line previews.
+          return ListView(
+            padding: const EdgeInsets.fromLTRB(0, 0, 0, 12),
             children: [
-              Expanded(flex: 3, child: calendar),
+              calendarCard(bounded: false),
               const SizedBox(height: 12),
-              Expanded(flex: 2, child: dayList),
+              agendaHeader(),
+              const SizedBox(height: 8),
+              if (selectedItems.isEmpty)
+                agendaEmpty()
+              else
+                ...agendaItems,
             ],
           );
         },
@@ -5292,82 +5405,171 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMobileScopeSelector() {
+    final activeCount = _items.where((item) => !item.isDeleted).length;
+    final favoriteCount =
+        _items.where((item) => !item.isDeleted && item.isFavorite).length;
+    final trashCount = _items.where((item) => item.isDeleted).length;
+    final selectedScope =
+        _libraryScope == 'collections' || _collectionFolderOpen
+            ? 'collections'
+            : _libraryScope;
+
+    return MobileLibraryScopeBar(
+      selectedScope: selectedScope,
+      onScopeSelected: (next) {
+        _clearBatchSelection();
+        setState(() {
+          _libraryScope = next;
+          if ((next == 'trash' || next == 'collections') &&
+              _workspaceView == _WorkspaceView.calendar) {
+            _workspaceView = _WorkspaceView.records;
+          }
+        });
+      },
+      tabs: [
+        MobileScopeTab(
+          scope: 'all',
+          label: _t('전체', 'All'),
+          icon: Icons.folder_open_rounded,
+          count: activeCount,
+        ),
+        MobileScopeTab(
+          scope: 'favorites',
+          label: _t('즐겨찾기', 'Favorites'),
+          icon: Icons.star_outline_rounded,
+          count: favoriteCount,
+        ),
+        MobileScopeTab(
+          scope: 'collections',
+          label: _t('보관함', 'Collections'),
+          icon: Icons.folder_copy_outlined,
+          count: _collections.length,
+        ),
+        MobileScopeTab(
+          scope: 'trash',
+          label: _t('휴지통', 'Trash'),
+          icon: Icons.delete_outline_rounded,
+          count: trashCount,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCollectionBrowser() {
+    final openId = _collectionFolderOpen ? _currentCollectionId : null;
+    final openCollection = _collectionById(openId);
+    final openItems = openId == null ? const <RecordingItem>[] : _scopeItems();
+    final openDuration = Duration(
+      milliseconds:
+          openItems.fold<int>(0, (sum, item) => sum + item.durationMs),
+    );
+
+    return CollectionBrowserView(
+      collections: [
+        for (final collection in _collections)
+          CollectionFolderData(
+            id: collection.id,
+            name: collection.name,
+            recordingCount: _collectionRecordingCount(collection.id),
+          ),
+      ],
+      title: _t('보관함', 'Collections'),
+      subtitle: _collections.isEmpty
+          ? _t('녹음을 정리할 폴더를 만들어 보세요.',
+              'Create a folder to organize recordings.')
+          : _t('보관함 ${_collections.length}개',
+              '${_collections.length} collections'),
+      createLabel: _t('새 보관함', 'New collection'),
+      createTooltip: _t('새 보관함', 'New collection'),
+      recordingCountLabel: (count) => _t('$count개', '$count items'),
+      backLabel: _t('보관함 목록', 'All collections'),
+      renameLabel: _t('이름 변경', 'Rename'),
+      deleteLabel: _t('보관함 삭제', 'Delete collection'),
+      menuTooltip: _t('보관함 메뉴', 'Collection menu'),
+      emptyTitle: _t('아직 보관함이 없습니다.', 'No collections yet.'),
+      emptyBody: _t(
+        '녹음을 주제별로 정리하려면 보관함을 만들어 보세요.',
+        'Create a collection to group related recordings.',
+      ),
+      openCollectionId: openId,
+      openCollectionName: openCollection?.name,
+      openCollectionSummary: openId == null
+          ? null
+          : openItems.isEmpty
+              ? _t('기록 없음', 'No recordings')
+              : _t(
+                  '${openItems.length}개 · ${formatDuration(openDuration)}',
+                  '${openItems.length} items · ${formatDuration(openDuration)}',
+                ),
+      openCollectionBody: openId == null
+          ? null
+          : _buildCollectionRecordingsList(openItems),
+      onCreate: () => unawaited(_createCollection()),
+      onBack: _closeCollectionFolder,
+      onOpen: _openCollection,
+      onRename: (id) {
+        final collection = _collectionById(id);
+        if (collection != null) unawaited(_renameCollection(collection));
+      },
+      onDelete: (id) {
+        final collection = _collectionById(id);
+        if (collection != null) unawaited(_deleteCollection(collection));
+      },
+    );
+  }
+
+  Widget _buildMobileScopeBody(List<RecordingItem> filtered) {
+    if (_libraryScope == 'collections' || _collectionFolderOpen) {
+      return _buildCollectionBrowser();
+    }
+    return _buildMobileRecordsList(filtered);
+  }
+
+  Widget _buildMobileRecordsList(List<RecordingItem> items) {
     final scheme = Theme.of(context).colorScheme;
 
-    Widget choice({
-      required String scope,
-      required String label,
-      required IconData icon,
-    }) {
-      final selected = _libraryScope == scope;
-      return ChoiceChip(
-        selected: selected,
-        label: Text(label),
-        avatar: Icon(icon, size: 17),
-        onSelected: (_) {
-          _clearBatchSelection();
-          setState(() {
-            _libraryScope = scope;
-            if (scope == 'trash' && _workspaceView == _WorkspaceView.calendar) {
-              _workspaceView = _WorkspaceView.records;
-            }
-          });
-        },
-        side: BorderSide(
-          color: selected ? scheme.primary : scheme.outlineVariant,
+    return Column(
+      children: [
+        _buildSidebarHeader(),
+        Divider(height: 1, color: scheme.outlineVariant),
+        Expanded(
+          child: items.isEmpty
+              ? _buildEmptyState(searchEmpty: _query.isNotEmpty)
+              : ListView.builder(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  itemCount: items.length,
+                  itemBuilder: (context, index) {
+                    final item = items[index];
+                    return _buildCompactRecordingTile(
+                      item,
+                      onTap: () => unawaited(_showRecordingDetails(item)),
+                      onLongPress: () =>
+                          unawaited(_showRecordingActions(item)),
+                    );
+                  },
+                ),
         ),
-      );
-    }
-
-    return SizedBox(
-      height: 46,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        children: [
-          choice(
-            scope: 'all',
-            label: _t('전체', 'All'),
-            icon: Icons.folder_open_rounded,
-          ),
-          const SizedBox(width: 6),
-          choice(
-            scope: 'favorites',
-            label: _t('즐겨찾기', 'Favorites'),
-            icon: Icons.star_outline_rounded,
-          ),
-          ..._collections.expand(
-            (collection) => [
-              const SizedBox(width: 6),
-              ChoiceChip(
-                selected: _libraryScope == 'collection:${collection.id}',
-                label: Text(collection.name),
-                avatar: const Icon(Icons.folder_outlined, size: 17),
-                onSelected: (_) {
-                  _clearBatchSelection();
-                  setState(() {
-                    _libraryScope = 'collection:${collection.id}';
-                    _workspaceView = _WorkspaceView.records;
-                  });
-                },
-              ),
-            ],
-          ),
-          const SizedBox(width: 6),
-          ActionChip(
-            avatar: const Icon(Icons.add_rounded, size: 17),
-            label: Text(_t('보관함', 'Collection')),
-            onPressed: () => unawaited(_createCollection()),
-          ),
-          const SizedBox(width: 6),
-          choice(
-            scope: 'trash',
-            label: _t('휴지통', 'Trash'),
-            icon: Icons.delete_outline_rounded,
-          ),
-        ],
-      ),
+      ],
     );
+  }
+
+  Widget _buildCollectionRecordingsList(List<RecordingItem> items) {
+    final q = _query.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? items
+        : items.where((item) {
+            final collection = _collectionById(item.collectionId);
+            final haystack = [
+              item.displayTitle,
+              item.fileName,
+              item.transcript ?? '',
+              collection?.name ?? '',
+              formatRecordingDate(item.createdAt),
+            ].join(' ').toLowerCase();
+            return haystack.contains(q);
+          }).toList();
+
+    return _buildMobileRecordsList(filtered);
   }
 
   Widget _buildRecordingLibrary(List<RecordingItem> filtered) {
@@ -5475,33 +5677,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Expanded(
               child: _workspaceView == _WorkspaceView.calendar
                   ? _buildCalendarWorkspace()
-                  : Column(
-                      children: [
-                        _buildSidebarHeader(),
-                        Divider(height: 1, color: scheme.outlineVariant),
-                        Expanded(
-                          child: filtered.isEmpty
-                              ? _buildEmptyState(searchEmpty: _query.isNotEmpty)
-                              : ListView.builder(
-                                  padding:
-                                      const EdgeInsets.symmetric(vertical: 5),
-                                  itemCount: filtered.length,
-                                  itemBuilder: (context, index) {
-                                    final item = filtered[index];
-                                    return _buildCompactRecordingTile(
-                                      item,
-                                      onTap: () => unawaited(
-                                        _showRecordingDetails(item),
-                                      ),
-                                      onLongPress: () => unawaited(
-                                        _showRecordingActions(item),
-                                      ),
-                                    );
-                                  },
-                                ),
-                        ),
-                      ],
-                    ),
+                  : _buildMobileScopeBody(filtered),
             ),
           ],
         );
@@ -5558,6 +5734,18 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   @override
+  void deactivate() {
+    _viewActive = false;
+    super.deactivate();
+  }
+
+  @override
+  void activate() {
+    super.activate();
+    _viewActive = true;
+  }
+
+  @override
   void dispose() {
     _recordingTicker?.cancel();
     _positionSubscription?.cancel();
@@ -5565,6 +5753,7 @@ class _HomeScreenState extends State<HomeScreen> {
     _stateSubscription?.cancel();
     _completeSubscription?.cancel();
     _searchController.dispose();
+    _recordingDetailChanges.dispose();
     unawaited(_player.dispose());
     unawaited(_recording.dispose());
     super.dispose();

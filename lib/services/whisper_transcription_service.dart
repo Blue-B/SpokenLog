@@ -7,6 +7,7 @@ import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
 import '../models/transcription_language.dart';
 import '../models/transcription_result.dart';
+import 'local_wav_input.dart';
 import 'whisper_model_manager.dart';
 
 class WhisperTranscriptionService {
@@ -35,7 +36,23 @@ class WhisperTranscriptionService {
         provider: 'Local Whisper',
         message:
             '로컬 Whisper는 WAV 녹음만 지원합니다. '
-            '기존 M4A 녹음은 클라우드 전사를 사용해 주세요.',
+            '가져온 M4A/MP3/MP4/WebM 파일은 클라우드 전사를 사용해 주세요.',
+      );
+    }
+
+    await ensureLocalWavInputs(
+      audioPaths: recording.audioPaths,
+      provider: 'Local Whisper',
+      containerHint: 'M4A/MP3/MP4/WebM 파일은 클라우드 전사를 사용해 주세요.',
+    );
+
+    if (!language.supportedByWhisperTiny) {
+      throw TranscriptionException(
+        kind: TranscriptionErrorKind.invalidRequest,
+        provider: 'Local Whisper',
+        message:
+            'Whisper Tiny 다국어 모델에는 ${language.label} 언어 토큰이 없습니다. '
+            '자동 감지를 사용하거나 SenseVoice를 선택해 주세요.',
       );
     }
 
@@ -165,6 +182,11 @@ List<Map<String, dynamic>> _decodeWhisperBatch(
   try {
     for (final path in request.audioPaths) {
       final wave = sherpa.readWave(path);
+      ensureDecodedWaveUsable(
+        sampleCount: wave.samples.length,
+        sampleRate: wave.sampleRate,
+        provider: 'Local Whisper',
+      );
       final durationSeconds = wave.sampleRate > 0
           ? wave.samples.length / wave.sampleRate
           : 0.0;

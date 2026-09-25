@@ -6,7 +6,9 @@ import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
 import '../models/transcription_language.dart';
+import '../models/transcription_provider.dart';
 import '../models/transcription_result.dart';
+import 'local_wav_input.dart';
 import 'moonshine_model_manager.dart';
 
 class MoonshineTranscriptionService {
@@ -35,17 +37,29 @@ class MoonshineTranscriptionService {
         provider: 'Local Moonshine',
         message:
             '로컬 Moonshine은 WAV 녹음만 지원합니다. '
-            '기존 M4A 녹음은 클라우드 전사를 사용해 주세요.',
+            '가져온 M4A/MP3/MP4/WebM 파일은 지원되지 않으니 '
+            '클라우드 전사를 사용해 주세요.',
       );
     }
 
+    await ensureLocalWavInputs(
+      audioPaths: recording.audioPaths,
+      provider: 'Local Moonshine',
+      containerHint: 'M4A/MP3/MP4/WebM 파일은 클라우드 전사를 사용해 주세요.',
+    );
+
     if (!language.supportedByMoonshineKo) {
+      final needsConfirmation =
+          TranscriptionProvider.localMoonshine.needsKoreanConfirmation(language);
       throw TranscriptionException(
         kind: TranscriptionErrorKind.invalidRequest,
         provider: 'Local Moonshine',
-        message:
-            '현재 설치된 Moonshine Tiny KO는 한국어 전용입니다. '
-            '${language.label}에는 Groq, Cloudflare, SenseVoice 또는 로컬 Whisper를 사용해 주세요.',
+        message: needsConfirmation
+            ? 'Moonshine Tiny KO는 자동 언어 감지를 지원하지 않습니다. '
+                '한국어 음성이면 언어를 한국어로 지정해 주세요. '
+                '다른 언어는 SenseVoice, 로컬 Whisper, Groq 또는 Cloudflare를 사용해 주세요.'
+            : '현재 설치된 Moonshine Tiny KO는 한국어 전용입니다. '
+                '${language.label}에는 Groq, Cloudflare, SenseVoice 또는 로컬 Whisper를 사용해 주세요.',
       );
     }
 
@@ -141,6 +155,11 @@ List<String> _decodeMoonshineBatch(_MoonshineDecodeRequest request) {
   try {
     for (final path in request.audioPaths) {
       final wave = sherpa.readWave(path);
+      ensureDecodedWaveUsable(
+        sampleCount: wave.samples.length,
+        sampleRate: wave.sampleRate,
+        provider: 'Local Moonshine',
+      );
       final stream = recognizer.createStream();
 
       try {

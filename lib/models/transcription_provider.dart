@@ -64,7 +64,7 @@ enum TranscriptionProvider {
         TranscriptionProvider.localMoonshine =>
           '한국어만 지원하며 현재 세부 타임스탬프를 제공하지 않습니다.',
         TranscriptionProvider.localWhisper =>
-          '약 104MB로 작지만 Tiny 모델이라 Large 계열보다 정확도가 낮고 SenseVoice보다 느릴 수 있습니다.',
+          '약 104MB로 작지만 Tiny 모델이라 Large 계열보다 정확도가 낮고 SenseVoice보다 느릴 수 있습니다. 광둥어(yue)는 Whisper 다국어 토큰에 없어 자동 감지나 SenseVoice를 사용해야 합니다.',
       };
 
   String get quotaLabel => switch (this) {
@@ -107,10 +107,78 @@ enum TranscriptionProvider {
     return switch (this) {
       TranscriptionProvider.localSenseVoice => language.supportedBySenseVoice,
       TranscriptionProvider.localMoonshine => language.supportedByMoonshineKo,
+      TranscriptionProvider.localWhisper => language.supportedByWhisperTiny,
+      TranscriptionProvider.groq ||
+      TranscriptionProvider.cloudflare => true,
+    };
+  }
+
+  /// Whether the provider can detect the spoken language on its own.
+  ///
+  /// SenseVoice and every Whisper-backed provider can; Moonshine Tiny KO is a
+  /// fixed Korean model with no detector, so it must always be given the
+  /// explicit `ko` selection.
+  bool get supportsAutomaticLanguageDetection {
+    return switch (this) {
+      TranscriptionProvider.localMoonshine => false,
       TranscriptionProvider.groq ||
       TranscriptionProvider.cloudflare ||
+      TranscriptionProvider.localSenseVoice ||
       TranscriptionProvider.localWhisper => true,
     };
+  }
+
+  /// The language actually passed to the engine, resolving `auto` for engines
+  /// without native detection.
+  ///
+  /// Returns `null` when the caller must ask the user instead of guessing.
+  /// Moonshine Tiny KO is Korean-only, so:
+  ///   * [TranscriptionLanguage.ko] resolves to `ko`;
+  ///   * [TranscriptionLanguage.auto] resolves to `ko` **only** after the user
+  ///     explicitly confirms Korean (see [autoResolvesTo]);
+  ///   * every other language resolves to `null` and must never be mapped onto
+  ///     Korean.
+  ///
+  /// For engines with detection the value is passed through unchanged.
+  TranscriptionLanguage? effectiveLanguage(
+    TranscriptionLanguage selected, {
+    bool koreanConfirmed = false,
+  }) {
+    if (supportsLanguage(selected)) return selected;
+    return autoResolvesTo(selected, koreanConfirmed: koreanConfirmed);
+  }
+
+  /// The language a provider without native detection falls back to for
+  /// [selected].
+  ///
+  /// Moonshine Tiny KO returns [TranscriptionLanguage.ko] for `auto` only when
+  /// [koreanConfirmed] is true, and `null` for every language it does not
+  /// support. Never maps an unknown language to Korean.
+  TranscriptionLanguage? autoResolvesTo(
+    TranscriptionLanguage selected, {
+    bool koreanConfirmed = false,
+  }) {
+    if (this == TranscriptionProvider.localMoonshine) {
+      if (selected == TranscriptionLanguage.ko) {
+        return TranscriptionLanguage.ko;
+      }
+      if (selected == TranscriptionLanguage.auto && koreanConfirmed) {
+        return TranscriptionLanguage.ko;
+      }
+      return null;
+    }
+    return supportsLanguage(selected) ? selected : null;
+  }
+
+  /// Whether this provider + language pair needs the user to confirm that the
+  /// audio is Korean before transcription starts.
+  ///
+  /// Currently true only for Moonshine Tiny KO with [TranscriptionLanguage.auto]:
+  /// the model has no detector, but the rest of the app still presents a
+  /// language picker with an auto option.
+  bool needsKoreanConfirmation(TranscriptionLanguage language) {
+    return this == TranscriptionProvider.localMoonshine &&
+        language == TranscriptionLanguage.auto;
   }
 
   List<String> get models => switch (this) {

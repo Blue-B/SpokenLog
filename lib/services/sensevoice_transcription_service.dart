@@ -7,6 +7,7 @@ import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
 import '../models/transcription_language.dart';
 import '../models/transcription_result.dart';
+import 'local_wav_input.dart';
 import 'sensevoice_model_manager.dart';
 
 class SenseVoiceTranscriptionService {
@@ -35,9 +36,15 @@ class SenseVoiceTranscriptionService {
         provider: 'Local SenseVoice',
         message:
             '로컬 SenseVoice는 WAV 녹음만 지원합니다. '
-            '기존 M4A 녹음은 Groq 또는 Cloudflare로 전사해 주세요.',
+            '가져온 M4A/MP3/MP4/WebM 파일은 Groq 또는 Cloudflare로 전사해 주세요.',
       );
     }
+
+    await ensureLocalWavInputs(
+      audioPaths: recording.audioPaths,
+      provider: 'Local SenseVoice',
+      containerHint: 'M4A/MP3/MP4/WebM 파일은 Groq 또는 Cloudflare로 전사해 주세요.',
+    );
 
     if (!language.supportedBySenseVoice) {
       throw TranscriptionException(
@@ -166,6 +173,11 @@ List<Map<String, dynamic>> _decodeSenseVoiceBatch(
   try {
     for (final path in request.audioPaths) {
       final wave = sherpa.readWave(path);
+      ensureDecodedWaveUsable(
+        sampleCount: wave.samples.length,
+        sampleRate: wave.sampleRate,
+        provider: 'Local SenseVoice',
+      );
       final durationSeconds = wave.sampleRate > 0
           ? wave.samples.length / wave.sampleRate
           : 0.0;

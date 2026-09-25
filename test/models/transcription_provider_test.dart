@@ -104,8 +104,23 @@ void main() {
       isFalse,
     );
     expect(
+      TranscriptionProvider.localMoonshine
+          .supportsAutomaticLanguageDetection,
+      isFalse,
+    );
+    expect(
       TranscriptionProvider.localWhisper
           .supportsLanguage(TranscriptionLanguage.es),
+      isTrue,
+    );
+    expect(
+      TranscriptionProvider.localWhisper
+          .supportsLanguage(TranscriptionLanguage.yue),
+      isFalse,
+    );
+    expect(
+      TranscriptionProvider.localWhisper
+          .supportsAutomaticLanguageDetection,
       isTrue,
     );
   });

@@ -6,7 +6,7 @@ SpokenLog is a local-first, cloud-optional recorder and transcription app. The n
 
 ![SpokenLog workflow](docs/spokenlog-workflow.svg)
 
-> First release: **[v0.1.0](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0)**. The replacement Android and iOS packages remain version 0.1.0 (internal build 3). Android's launcher package is corrected; the iOS IPA remains unsigned and requires Apple signing before installation. See the [release notes](docs/releases/v0.1.0.md) for verification results and Android update-signing precautions.
+> First release: **[v0.1.0](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0)**. Android build 4 fixes recording-detail playback, in-place cloud credential setup, settings navigation, mobile collections and calendar previews. The shared source includes the fixes for iOS too, but the downloadable unsigned IPA is still build 3 and requires Apple signing. Windows/macOS downloads are unchanged. See the [release notes](docs/releases/v0.1.0.md) for platform-specific status and verification.
 
 ## What makes SpokenLog different
 
