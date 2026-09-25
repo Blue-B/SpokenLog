@@ -6,7 +6,7 @@ SpokenLog is a local-first, cloud-optional recorder and transcription app. The n
 
 ![SpokenLog workflow](docs/spokenlog-workflow.svg)
 
-> Latest release: **v0.1.0**. Windows, Android, and macOS are packaged for direct download; iOS is also compiled as an unsigned IPA and requires Apple re-signing before installation.
+> Latest release: **v0.1.0**. Windows, Android, and macOS are packaged for direct download; iOS is also compiled as an unsigned IPA and requires Apple re-signing before installation. Release assets are produced by GitHub Actions.
 
 ## What makes SpokenLog different
 
