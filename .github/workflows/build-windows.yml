@@ -131,7 +131,7 @@ jobs:
         if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
         env:
           GH_TOKEN: ${{ github.token }}
-        shell: pwsh
+        shell: bash
         run: |
           for i in 1 2 3 4 5; do
             gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
