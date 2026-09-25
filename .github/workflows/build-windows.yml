@@ -355,3 +355,31 @@ jobs:
           if gh release view v0.1.1-beta.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
             gh release delete v0.1.1-beta.1 --repo "${{ github.repository }}" --yes --cleanup-tag
           fi
+
+
+  publish-existing-release:
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Publish v0.1.1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Verify release assets and create checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release download v0.1.1 --repo "${{ github.repository }}" --pattern "SpokenLog-*"
+          test -f SpokenLog-Windows-x64.zip
+          test -f SpokenLog-Android.apk
+          test -f SpokenLog-macOS.zip
+          test -f SpokenLog-iOS-unsigned.ipa
+          sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa > SHA256SUMS.txt
+          gh release upload v0.1.1 SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
+
+      - name: Publish v0.1.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          release_id=$(gh release view v0.1.1 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
+          gh api --method PATCH "repos/${{ github.repository }}/releases/$release_id" -F draft=false -F prerelease=false >/dev/null
