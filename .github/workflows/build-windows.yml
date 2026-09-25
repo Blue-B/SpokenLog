@@ -13,32 +13,31 @@ concurrency:
 
 jobs:
   prepare-release:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Create draft prerelease
+      - name: Create draft release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if gh release view v0.1.0-beta.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release delete v0.1.0-beta.1 --repo "${{ github.repository }}" --yes --cleanup-tag
+          if gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release delete v0.1.0 --repo "${{ github.repository }}" --yes --cleanup-tag
           fi
-          gh release create v0.1.0-beta.1 \
+          gh release create v0.1.0 \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "SpokenLog v0.1.0-beta.1" \
+            --title "SpokenLog v0.1.0" \
             --draft \
-            --prerelease \
-            --notes "First beta build of SpokenLog.
+            --notes "SpokenLog v0.1.0
 
           Downloads:
-          - Windows x64: download SpokenLog-Windows-x64.zip, extract it, and run SpokenLog.exe.
-          - Android: download SpokenLog-Android.apk and install it manually.
-
-          This beta focuses on Windows and Android. macOS and iOS are not included yet because they have not completed native build/device validation.
+          - Windows x64: SpokenLog-Windows-x64.zip — extract and run SpokenLog.exe.
+          - Android: SpokenLog-Android.apk — install the APK directly.
+          - macOS: SpokenLog-macOS.zip — extract and open SpokenLog.app. This build is ad-hoc signed, not Apple-notarized.
+          - iOS: SpokenLog-iOS-unsigned.ipa — compiled for physical iPhone/iPad, but Apple requires the IPA to be re-signed with a valid Apple Developer certificate/provisioning profile before installation.
 
           Highlights:
           - Local-first recording library
@@ -46,7 +45,7 @@ jobs:
           - Local speaker diarization
           - Editable transcripts and speaker names
           - Batch transcription
-          - Screen-off Android recording support
+          - Background/screen-off recording support where the OS permits it
           - Interrupted recording recovery"
 
   build-windows:
@@ -71,6 +70,7 @@ jobs:
           Copy-Item lib "$env:RUNNER_TEMP\spokenlog_lib" -Recurse
           Copy-Item pubspec.yaml "$env:RUNNER_TEMP\spokenlog_pubspec.yaml"
           Copy-Item analysis_options.yaml "$env:RUNNER_TEMP\spokenlog_analysis.yaml"
+          if (Test-Path pubspec.lock) { Copy-Item pubspec.lock "$env:RUNNER_TEMP\spokenlog_pubspec.lock" }
           if (Test-Path assets) { Copy-Item assets "$env:RUNNER_TEMP\spokenlog_assets" -Recurse }
           if (Test-Path test) { Copy-Item test "$env:RUNNER_TEMP\spokenlog_test" -Recurse }
 
@@ -99,14 +99,13 @@ jobs:
           Copy-Item "$env:RUNNER_TEMP\spokenlog_lib" lib -Recurse
           Copy-Item "$env:RUNNER_TEMP\spokenlog_pubspec.yaml" pubspec.yaml -Force
           Copy-Item "$env:RUNNER_TEMP\spokenlog_analysis.yaml" analysis_options.yaml -Force
+          if (Test-Path "$env:RUNNER_TEMP\spokenlog_pubspec.lock") { Copy-Item "$env:RUNNER_TEMP\spokenlog_pubspec.lock" pubspec.lock -Force }
           if (Test-Path "$env:RUNNER_TEMP\spokenlog_assets") {
             if (Test-Path assets) { Remove-Item assets -Recurse -Force }
             Copy-Item "$env:RUNNER_TEMP\spokenlog_assets" assets -Recurse
           }
           if (Test-Path test) { Remove-Item test -Recurse -Force }
-          if (Test-Path "$env:RUNNER_TEMP\spokenlog_test") {
-            Copy-Item "$env:RUNNER_TEMP\spokenlog_test" test -Recurse
-          }
+          if (Test-Path "$env:RUNNER_TEMP\spokenlog_test") { Copy-Item "$env:RUNNER_TEMP\spokenlog_test" test -Recurse }
 
       - name: Get dependencies
         run: flutter pub get
@@ -124,17 +123,16 @@ jobs:
         run: flutter build windows --release
 
       - name: Package Windows release
-        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
         shell: pwsh
-        run: |
-          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "SpokenLog-Windows-x64.zip" -CompressionLevel Optimal
+        run: Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "SpokenLog-Windows-x64.zip" -CompressionLevel Optimal
 
       - name: Upload Windows release asset
-        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release upload v0.1.0-beta.1 "SpokenLog-Windows-x64.zip" --repo "${{ github.repository }}" --clobber
+        run: gh release upload v0.1.0 "SpokenLog-Windows-x64.zip" --repo "${{ github.repository }}" --clobber
 
   build-android:
     needs: [prepare-release]
@@ -154,11 +152,16 @@ jobs:
           cp -R lib "$RUNNER_TEMP/spokenlog_lib"
           cp pubspec.yaml "$RUNNER_TEMP/spokenlog_pubspec.yaml"
           cp analysis_options.yaml "$RUNNER_TEMP/spokenlog_analysis.yaml"
+          if [ -f pubspec.lock ]; then cp pubspec.lock "$RUNNER_TEMP/spokenlog_pubspec.lock"; fi
           if [ -d assets ]; then cp -R assets "$RUNNER_TEMP/spokenlog_assets"; fi
           if [ -d test ]; then cp -R test "$RUNNER_TEMP/spokenlog_test"; fi
+          if [ -f android/app/src/main/AndroidManifest.xml ]; then
+            mkdir -p "$RUNNER_TEMP/spokenlog_android"
+            cp android/app/src/main/AndroidManifest.xml "$RUNNER_TEMP/spokenlog_android/AndroidManifest.xml"
+          fi
 
       - name: Create Android runner
-        run: flutter create . --platforms=android --project-name voice_transcriber
+        run: flutter create . --platforms=android --project-name voice_transcriber --org io.github.blueb
 
       - name: Restore app source
         run: |
@@ -166,8 +169,17 @@ jobs:
           cp -R "$RUNNER_TEMP/spokenlog_lib" lib
           cp "$RUNNER_TEMP/spokenlog_pubspec.yaml" pubspec.yaml
           cp "$RUNNER_TEMP/spokenlog_analysis.yaml" analysis_options.yaml
+          if [ -f "$RUNNER_TEMP/spokenlog_pubspec.lock" ]; then cp "$RUNNER_TEMP/spokenlog_pubspec.lock" pubspec.lock; fi
           if [ -d "$RUNNER_TEMP/spokenlog_assets" ]; then rm -rf assets; cp -R "$RUNNER_TEMP/spokenlog_assets" assets; fi
           if [ -d "$RUNNER_TEMP/spokenlog_test" ]; then rm -rf test; cp -R "$RUNNER_TEMP/spokenlog_test" test; fi
+          if [ -f "$RUNNER_TEMP/spokenlog_android/AndroidManifest.xml" ]; then
+            cp "$RUNNER_TEMP/spokenlog_android/AndroidManifest.xml" android/app/src/main/AndroidManifest.xml
+          fi
+
+      - name: Set Android application ID
+        run: |
+          sed -i 's/applicationId = "[^"]*"/applicationId = "io.github.blueb.spokenlog"/' android/app/build.gradle.kts || true
+          sed -i 's/namespace = "[^"]*"/namespace = "io.github.blueb.spokenlog"/' android/app/build.gradle.kts || true
 
       - name: Get dependencies
         run: flutter pub get
@@ -179,35 +191,129 @@ jobs:
         run: flutter build apk --release
 
       - name: Package Android release
-        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
         run: cp build/app/outputs/flutter-apk/app-release.apk SpokenLog-Android.apk
 
       - name: Upload Android release asset
-        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v0.1.0-beta.1 SpokenLog-Android.apk --repo "${{ github.repository }}" --clobber
+        run: gh release upload v0.1.0 SpokenLog-Android.apk --repo "${{ github.repository }}" --clobber
 
-
-  finalize-release:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
-    needs: [build-windows, build-android]
-    runs-on: ubuntu-latest
+  build-apple:
+    needs: [prepare-release]
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0' && needs.prepare-release.result == 'success'
+    runs-on: macos-latest
     permissions:
       contents: write
     steps:
-      - name: Download release assets for checksums
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download v0.1.0-beta.1 --repo "${{ github.repository }}" --pattern "SpokenLog-*"
-          sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk > SHA256SUMS.txt
-          gh release upload v0.1.0-beta.1 SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
-      - name: Publish prerelease
+      - name: Preserve app source
+        shell: bash
+        run: |
+          cp -R lib "$RUNNER_TEMP/spokenlog_lib"
+          cp pubspec.yaml "$RUNNER_TEMP/spokenlog_pubspec.yaml"
+          cp analysis_options.yaml "$RUNNER_TEMP/spokenlog_analysis.yaml"
+          if [ -f pubspec.lock ]; then cp pubspec.lock "$RUNNER_TEMP/spokenlog_pubspec.lock"; fi
+          if [ -d assets ]; then cp -R assets "$RUNNER_TEMP/spokenlog_assets"; fi
+          if [ -d test ]; then cp -R test "$RUNNER_TEMP/spokenlog_test"; fi
+
+      - name: Create Apple runners
+        run: flutter create . --platforms=macos,ios --project-name voice_transcriber --org io.github.blueb
+
+      - name: Restore app source
+        shell: bash
+        run: |
+          rm -rf lib
+          cp -R "$RUNNER_TEMP/spokenlog_lib" lib
+          cp "$RUNNER_TEMP/spokenlog_pubspec.yaml" pubspec.yaml
+          cp "$RUNNER_TEMP/spokenlog_analysis.yaml" analysis_options.yaml
+          if [ -f "$RUNNER_TEMP/spokenlog_pubspec.lock" ]; then cp "$RUNNER_TEMP/spokenlog_pubspec.lock" pubspec.lock; fi
+          if [ -d "$RUNNER_TEMP/spokenlog_assets" ]; then rm -rf assets; cp -R "$RUNNER_TEMP/spokenlog_assets" assets; fi
+          if [ -d "$RUNNER_TEMP/spokenlog_test" ]; then rm -rf test; cp -R "$RUNNER_TEMP/spokenlog_test" test; fi
+
+      - name: Prepare macOS and iOS permissions
+        shell: bash
+        run: |
+          sed -i '' 's/^PRODUCT_NAME = .*/PRODUCT_NAME = SpokenLog/' macos/Runner/Configs/AppInfo.xcconfig
+          sed -i '' 's/^PRODUCT_BUNDLE_IDENTIFIER = .*/PRODUCT_BUNDLE_IDENTIFIER = io.github.blueb.spokenlog/' macos/Runner/Configs/AppInfo.xcconfig
+
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" macos/Runner/Info.plist >/dev/null 2>&1 || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string SpokenLog needs microphone access to record audio." macos/Runner/Info.plist
+
+          for file in macos/Runner/DebugProfile.entitlements macos/Runner/Release.entitlements; do
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.security.device.audio-input" "$file" >/dev/null 2>&1 || true
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.device.audio-input bool true" "$file"
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.security.network.client" "$file" >/dev/null 2>&1 || true
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.network.client bool true" "$file"
+            /usr/libexec/PlistBuddy -c "Delete :com.apple.security.files.user-selected.read-write" "$file" >/dev/null 2>&1 || true
+            /usr/libexec/PlistBuddy -c "Add :com.apple.security.files.user-selected.read-write bool true" "$file"
+          done
+
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName SpokenLog" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" ios/Runner/Info.plist >/dev/null 2>&1 || true
+          /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string SpokenLog needs microphone access to record audio." ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Delete :UIBackgroundModes" ios/Runner/Info.plist >/dev/null 2>&1 || true
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes array" ios/Runner/Info.plist
+          /usr/libexec/PlistBuddy -c "Add :UIBackgroundModes:0 string audio" ios/Runner/Info.plist
+
+      - name: Get dependencies
+        run: flutter pub get
+
+      - name: Generate Apple app icons
+        run: dart run flutter_launcher_icons
+
+      - name: Build macOS release
+        run: flutter build macos --release
+
+      - name: Package and upload macOS release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          release_id=$(gh release view v0.1.0-beta.1 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
-          gh api --method PATCH "repos/${{ github.repository }}/releases/$release_id" -F draft=false -F prerelease=true >/dev/null
+          APP_PATH="build/macos/Build/Products/Release/SpokenLog.app"
+          codesign --deep --force --sign - "$APP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" SpokenLog-macOS.zip
+          gh release upload v0.1.0 SpokenLog-macOS.zip --repo "${{ github.repository }}" --clobber
+
+      - name: Build unsigned iOS release
+        run: flutter build ios --release --no-codesign
+
+      - name: Package and upload unsigned iOS IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          rm -rf Payload
+          mkdir Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
+          zip -qry SpokenLog-iOS-unsigned.ipa Payload
+          gh release upload v0.1.0 SpokenLog-iOS-unsigned.ipa --repo "${{ github.repository }}" --clobber
+
+  finalize-release:
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
+    needs: [build-windows, build-android, build-apple]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download release assets and create checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v0.1.0 --repo "${{ github.repository }}" --pattern "SpokenLog-*"
+          sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa > SHA256SUMS.txt
+          gh release upload v0.1.0 SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          release_id=$(gh release view v0.1.0 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
+          gh api --method PATCH "repos/${{ github.repository }}/releases/$release_id" -F draft=false -F prerelease=false >/dev/null
