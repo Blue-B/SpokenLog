@@ -8,7 +8,7 @@ on:
     branches: [ main ]
 
 concurrency:
-  group: spokenlog-${{ github.workflow }}-${{ github.ref }}
+  group: spokenlog-${{ github.workflow }}-${{ github.sha }}
   cancel-in-progress: true
 
 jobs:
