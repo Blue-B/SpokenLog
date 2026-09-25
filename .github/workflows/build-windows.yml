@@ -265,6 +265,8 @@ jobs:
             /usr/libexec/PlistBuddy -c "Add :com.apple.security.files.user-selected.read-write bool true" "$file"
           done
 
+          sed -i '' 's/io\.github\.blueb\.voiceTranscriber/io.github.blueb.spokenlog/g' ios/Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/io\.github\.blueb\.voice_transcriber/io.github.blueb.spokenlog/g' ios/Runner.xcodeproj/project.pbxproj
           /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName SpokenLog" ios/Runner/Info.plist
           /usr/libexec/PlistBuddy -c "Delete :NSMicrophoneUsageDescription" ios/Runner/Info.plist >/dev/null 2>&1 || true
           /usr/libexec/PlistBuddy -c "Add :NSMicrophoneUsageDescription string SpokenLog needs microphone access to record audio." ios/Runner/Info.plist
