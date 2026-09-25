@@ -266,7 +266,7 @@ jobs:
         run: flutter pub get
 
       - name: Generate Apple app icons
-        run: dart run flutter_launcher_icons
+        run: dart run flutter_launcher_icons -f flutter_launcher_icons_apple.yaml
 
       - name: Build macOS release
         run: flutter build macos --release
