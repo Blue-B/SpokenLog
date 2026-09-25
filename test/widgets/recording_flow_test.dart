@@ -17,6 +17,7 @@ import 'package:voice_transcriber/models/transcription_provider.dart';
 import 'package:voice_transcriber/screens/home_screen.dart';
 import 'package:voice_transcriber/services/recording_service.dart';
 import 'package:voice_transcriber/services/settings_service.dart';
+import 'package:voice_transcriber/services/wav_waveform_service.dart';
 import 'package:voice_transcriber/widgets/app_settings_sheet.dart';
 import 'package:voice_transcriber/widgets/cloud_credentials_dialog.dart';
 import 'package:voice_transcriber/widgets/recording_details_sheet.dart';
@@ -66,6 +67,15 @@ Uint8List syntheticWav({int milliseconds = 3000, int sampleRate = 16000}) {
 // ---------------------------------------------------------------------------
 // Fakes
 // ---------------------------------------------------------------------------
+
+// These tests cover modal/playback state, not waveform sampling. A controlled
+// reader avoids leaving real asynchronous WAV reads alive after fake-time tests,
+// which otherwise locks fixture files on Windows during teardown.
+class FakeWaveformService extends WavWaveformService {
+  @override
+  Future<List<double>> readPeaks(String path, {int bucketCount = 180}) async =>
+      const [0.1, 0.4, 0.8, 0.3];
+}
 
 class FakeAudioPlayer implements AudioPlayer {
   final positionController = StreamController<Duration>.broadcast();
@@ -327,6 +337,7 @@ Future<void> pumpHome(
         recordingService: recording,
         settingsService: settings,
         audioPlayer: player,
+        waveformService: FakeWaveformService(),
       ),
     ),
   );

@@ -39,11 +39,12 @@ enum _WorkspaceView { records, calendar }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.recordingService, this.settingsService,
-    this.audioPlayer});
+    this.audioPlayer, this.waveformService});
 
   final RecordingService? recordingService;
   final SettingsService? settingsService;
   final AudioPlayer? audioPlayer;
+  final WavWaveformService? waveformService;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -60,7 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final _whisperModelManager = WhisperModelManager();
   final _speakerDiarizationModelManager =
       SpeakerDiarizationModelManager();
-  final _waveformService = WavWaveformService();
+  late final _waveformService = widget.waveformService ?? WavWaveformService();
   final Map<String, Future<List<double>>> _waveformFutures = {};
   late final SenseVoiceTranscriptionService _senseVoice;
   late final MoonshineTranscriptionService _moonshine;
