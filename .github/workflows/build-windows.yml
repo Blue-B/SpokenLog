@@ -132,7 +132,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
-        run: gh release upload v0.1.0 "SpokenLog-Windows-x64.zip" --repo "${{ github.repository }}" --clobber
+        run: |
+          for i in 1 2 3 4 5; do
+            gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
+            sleep 2
+          done
+          gh release upload v0.1.0 "SpokenLog-Windows-x64.zip" --repo "${{ github.repository }}" --clobber
 
   build-android:
     needs: [prepare-release]
@@ -198,7 +203,12 @@ jobs:
         if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v0.1.0 SpokenLog-Android.apk --repo "${{ github.repository }}" --clobber
+        run: |
+          for i in 1 2 3 4 5; do
+            gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
+            sleep 2
+          done
+          gh release upload v0.1.0 SpokenLog-Android.apk --repo "${{ github.repository }}" --clobber
 
   build-apple:
     needs: [prepare-release]
@@ -279,6 +289,10 @@ jobs:
           APP_PATH="build/macos/Build/Products/Release/SpokenLog.app"
           codesign --deep --force --sign - "$APP_PATH"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" SpokenLog-macOS.zip
+          for i in 1 2 3 4 5; do
+            gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
+            sleep 2
+          done
           gh release upload v0.1.0 SpokenLog-macOS.zip --repo "${{ github.repository }}" --clobber
 
       - name: Build unsigned iOS release
@@ -293,6 +307,10 @@ jobs:
           mkdir Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           zip -qry SpokenLog-iOS-unsigned.ipa Payload
+          for i in 1 2 3 4 5; do
+            gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
+            sleep 2
+          done
           gh release upload v0.1.0 SpokenLog-iOS-unsigned.ipa --repo "${{ github.repository }}" --clobber
 
   finalize-release:
@@ -301,6 +319,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      issues: write
     steps:
       - name: Download release assets and create checksums
         env:
@@ -317,3 +336,25 @@ jobs:
         run: |
           release_id=$(gh release view v0.1.0 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
           gh api --method PATCH "repos/${{ github.repository }}/releases/$release_id" -F draft=false -F prerelease=false >/dev/null
+
+      - name: Remove superseded beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view v0.1.0-beta.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release delete v0.1.0-beta.1 --repo "${{ github.repository }}" --yes --cleanup-tag
+          fi
+
+      - name: Delete internal issue 2
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          issue_id=$(gh api "repos/${{ github.repository }}/issues/2" --jq .node_id 2>/dev/null || true)
+          if [ -n "$issue_id" ]; then
+            gh api graphql \
+              -f query='mutation($issueId:ID!){deleteIssue(input:{issueId:$issueId}){clientMutationId}}' \
+              -F issueId="$issue_id"
+          fi
