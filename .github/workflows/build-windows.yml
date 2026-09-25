@@ -39,6 +39,10 @@ jobs:
           - macOS: SpokenLog-macOS.zip — extract and open SpokenLog.app. This build is ad-hoc signed, not Apple-notarized.
           - iOS: SpokenLog-iOS-unsigned.ipa — compiled for physical iPhone/iPad, but Apple requires the IPA to be re-signed with a valid Apple Developer certificate/provisioning profile before installation.
 
+          Hotfix:
+          - Fix Android startup crash caused by a launcher package/namespace mismatch.
+          - Add a CI guard that verifies MainActivity, namespace, applicationId, and manifest agree before building.
+
           Highlights:
           - Local-first recording library
           - Local or cloud transcription
