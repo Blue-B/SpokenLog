@@ -212,7 +212,7 @@ jobs:
 
   build-apple:
     needs: [prepare-release]
-    if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.0' || github.event.head_commit.message == 'Finalize v0.1.0') && needs.prepare-release.result == 'success'
+    if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.0' || github.event.head_commit.message == 'Finalize v0.1.0') && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
     runs-on: macos-latest
     permissions:
       contents: write
