@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   prepare-release:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.1'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -23,15 +23,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release delete v0.1.0 --repo "${{ github.repository }}" --yes --cleanup-tag
+          if gh release view v0.1.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release delete v0.1.1 --repo "${{ github.repository }}" --yes --cleanup-tag
           fi
-          gh release create v0.1.0 \
+          gh release create v0.1.1 \
             --repo "${{ github.repository }}" \
             --target "${{ github.sha }}" \
-            --title "SpokenLog v0.1.0" \
+            --title "SpokenLog v0.1.1" \
             --draft \
-            --notes "SpokenLog v0.1.0
+            --notes "SpokenLog v0.1.1
 
           Downloads:
           - Windows x64: SpokenLog-Windows-x64.zip — extract and run SpokenLog.exe.
@@ -50,7 +50,7 @@ jobs:
 
   build-windows:
     needs: [prepare-release]
-    if: always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') && github.event.head_commit.message != 'Publish v0.1.0'
+    if: always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') && github.event.head_commit.message != 'Publish v0.1.1'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -123,25 +123,25 @@ jobs:
         run: flutter build windows --release
 
       - name: Package Windows release
-        if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.0' || github.event.head_commit.message == 'Finalize v0.1.0')
+        if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.1' || github.event.head_commit.message == 'Finalize v0.1.1')
         shell: pwsh
         run: Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "SpokenLog-Windows-x64.zip" -CompressionLevel Optimal
 
       - name: Upload Windows release asset
-        if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.0' || github.event.head_commit.message == 'Finalize v0.1.0')
+        if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.1' || github.event.head_commit.message == 'Finalize v0.1.1')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
           for i in 1 2 3 4 5; do
-            gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
+            gh release view v0.1.1 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
             sleep 2
           done
-          gh release upload v0.1.0 "SpokenLog-Windows-x64.zip" --repo "${{ github.repository }}" --clobber
+          gh release upload v0.1.1 "SpokenLog-Windows-x64.zip" --repo "${{ github.repository }}" --clobber
 
   build-android:
     needs: [prepare-release]
-    if: always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') && github.event.head_commit.message != 'Finalize v0.1.0' && github.event.head_commit.message != 'Publish v0.1.0'
+    if: always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped') && github.event.head_commit.message != 'Finalize v0.1.1' && github.event.head_commit.message != 'Publish v0.1.1'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -166,7 +166,7 @@ jobs:
           fi
 
       - name: Create Android runner
-        run: flutter create . --platforms=android --project-name voice_transcriber --org io.github.blueb
+        run: flutter create . --platforms=android --project-name spokenlog --org io.github.blueb
 
       - name: Restore app source
         run: |
@@ -181,10 +181,14 @@ jobs:
             cp "$RUNNER_TEMP/spokenlog_android/AndroidManifest.xml" android/app/src/main/AndroidManifest.xml
           fi
 
-      - name: Set Android application ID
+      - name: Verify Android launcher package
+        shell: bash
         run: |
-          sed -i 's/applicationId = "[^"]*"/applicationId = "io.github.blueb.spokenlog"/' android/app/build.gradle.kts || true
-          sed -i 's/namespace = "[^"]*"/namespace = "io.github.blueb.spokenlog"/' android/app/build.gradle.kts || true
+          test -f android/app/src/main/kotlin/io/github/blueb/spokenlog/MainActivity.kt
+          grep -q '^package io.github.blueb.spokenlog$' android/app/src/main/kotlin/io/github/blueb/spokenlog/MainActivity.kt
+          grep -q 'namespace = "io.github.blueb.spokenlog"' android/app/build.gradle.kts
+          grep -q 'applicationId = "io.github.blueb.spokenlog"' android/app/build.gradle.kts
+          grep -q 'android:name=".MainActivity"' android/app/src/main/AndroidManifest.xml
 
       - name: Get dependencies
         run: flutter pub get
@@ -196,23 +200,23 @@ jobs:
         run: flutter build apk --release
 
       - name: Package Android release
-        if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.0' || github.event.head_commit.message == 'Finalize v0.1.0')
+        if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.1' || github.event.head_commit.message == 'Finalize v0.1.1')
         run: cp build/app/outputs/flutter-apk/app-release.apk SpokenLog-Android.apk
 
       - name: Upload Android release asset
-        if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.0' || github.event.head_commit.message == 'Finalize v0.1.0')
+        if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.1' || github.event.head_commit.message == 'Finalize v0.1.1')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           for i in 1 2 3 4 5; do
-            gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
+            gh release view v0.1.1 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
             sleep 2
           done
-          gh release upload v0.1.0 SpokenLog-Android.apk --repo "${{ github.repository }}" --clobber
+          gh release upload v0.1.1 SpokenLog-Android.apk --repo "${{ github.repository }}" --clobber
 
   build-apple:
     needs: [prepare-release]
-    if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.0' || github.event.head_commit.message == 'Finalize v0.1.0') && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
+    if: github.event_name == 'push' && (github.event.head_commit.message == 'Release v0.1.1' || github.event.head_commit.message == 'Finalize v0.1.1') && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
     runs-on: macos-latest
     permissions:
       contents: write
@@ -292,10 +296,10 @@ jobs:
           codesign --deep --force --sign - "$APP_PATH"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" SpokenLog-macOS.zip
           for i in 1 2 3 4 5; do
-            gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
+            gh release view v0.1.1 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
             sleep 2
           done
-          gh release upload v0.1.0 SpokenLog-macOS.zip --repo "${{ github.repository }}" --clobber
+          gh release upload v0.1.1 SpokenLog-macOS.zip --repo "${{ github.repository }}" --clobber
 
       - name: Build unsigned iOS release
         run: flutter build ios --release --no-codesign
@@ -310,13 +314,13 @@ jobs:
           cp -R build/ios/iphoneos/Runner.app Payload/
           zip -qry SpokenLog-iOS-unsigned.ipa Payload
           for i in 1 2 3 4 5; do
-            gh release view v0.1.0 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
+            gh release view v0.1.1 --repo "${{ github.repository }}" >/dev/null 2>&1 && break
             sleep 2
           done
-          gh release upload v0.1.0 SpokenLog-iOS-unsigned.ipa --repo "${{ github.repository }}" --clobber
+          gh release upload v0.1.1 SpokenLog-iOS-unsigned.ipa --repo "${{ github.repository }}" --clobber
 
   finalize-release:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0'
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.1'
     needs: [build-windows, build-android, build-apple]
     runs-on: ubuntu-latest
     permissions:
@@ -327,16 +331,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v0.1.0 --repo "${{ github.repository }}" --pattern "SpokenLog-*"
+          gh release download v0.1.1 --repo "${{ github.repository }}" --pattern "SpokenLog-*"
           sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa > SHA256SUMS.txt
-          gh release upload v0.1.0 SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
+          gh release upload v0.1.1 SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          release_id=$(gh release view v0.1.0 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
+          release_id=$(gh release view v0.1.1 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
           gh api --method PATCH "repos/${{ github.repository }}/releases/$release_id" -F draft=false -F prerelease=false >/dev/null
 
       - name: Remove superseded beta release
@@ -344,122 +348,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          if gh release view v0.1.0-beta.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release delete v0.1.0-beta.1 --repo "${{ github.repository }}" --yes --cleanup-tag
-          fi
-
-      - name: Delete internal issue 2
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          issue_id=$(gh api "repos/${{ github.repository }}/issues/2" --jq .node_id 2>/dev/null || true)
-          if [ -n "$issue_id" ]; then
-            gh api graphql \
-              -f query='mutation($issueId:ID!){deleteIssue(input:{issueId:$issueId}){clientMutationId}}' \
-              -F issueId="$issue_id"
-          fi
-
-
-  finalize-existing-release:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Finalize v0.1.0'
-    needs: [build-windows, build-apple]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-    steps:
-      - name: Download release assets and create checksums
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release download v0.1.0 --repo "${{ github.repository }}" --pattern "SpokenLog-*"
-          sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa > SHA256SUMS.txt
-          gh release upload v0.1.0 SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
-
-      - name: Publish release and move tag to final commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          release_id=$(gh release view v0.1.0 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
-          gh api --method PATCH "repos/${{ github.repository }}/releases/$release_id" -F draft=false -F prerelease=false >/dev/null
-          gh api --method PATCH "repos/${{ github.repository }}/git/refs/tags/v0.1.0" -f sha="${{ github.sha }}" -F force=true >/dev/null
-
-      - name: Remove superseded beta release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          if gh release view v0.1.0-beta.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release delete v0.1.0-beta.1 --repo "${{ github.repository }}" --yes --cleanup-tag
-          fi
-
-      - name: Delete internal issue 2
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          issue_id=$(gh api "repos/${{ github.repository }}/issues/2" --jq .node_id 2>/dev/null || true)
-          if [ -n "$issue_id" ]; then
-            gh api graphql \
-              -f query='mutation($issueId:ID!){deleteIssue(input:{issueId:$issueId}){clientMutationId}}' \
-              -F issueId="$issue_id"
-          fi
-
-
-  publish-existing-release:
-    if: github.event_name == 'push' && github.event.head_commit.message == 'Publish v0.1.0'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      issues: write
-    steps:
-      - name: Verify release assets and create checksums
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          gh release download v0.1.0 --repo "${{ github.repository }}" --pattern "SpokenLog-*"
-          test -f SpokenLog-Windows-x64.zip
-          test -f SpokenLog-Android.apk
-          test -f SpokenLog-macOS.zip
-          test -f SpokenLog-iOS-unsigned.ipa
-          sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa > SHA256SUMS.txt
-          gh release upload v0.1.0 SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
-
-      - name: Publish v0.1.0
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          release_id=$(gh release view v0.1.0 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
-          gh api --method PATCH "repos/${{ github.repository }}/releases/$release_id" -F draft=false -F prerelease=false >/dev/null
-
-          if gh api "repos/${{ github.repository }}/git/ref/tags/v0.1.0" >/dev/null 2>&1; then
-            gh api --method PATCH "repos/${{ github.repository }}/git/refs/tags/v0.1.0" -f sha="${{ github.sha }}" -F force=true >/dev/null || true
-          fi
-
-      - name: Remove superseded beta release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          if gh release view v0.1.0-beta.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release delete v0.1.0-beta.1 --repo "${{ github.repository }}" --yes --cleanup-tag
-          fi
-
-      - name: Delete internal issue 2
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          issue_id=$(gh api "repos/${{ github.repository }}/issues/2" --jq .node_id 2>/dev/null || true)
-          if [ -n "$issue_id" ]; then
-            gh api graphql \
-              -f query='mutation($issueId:ID!){deleteIssue(input:{issueId:$issueId}){clientMutationId}}' \
-              -F issueId="$issue_id"
+          if gh release view v0.1.1-beta.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release delete v0.1.1-beta.1 --repo "${{ github.repository }}" --yes --cleanup-tag
           fi
