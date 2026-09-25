@@ -1,0 +1,53 @@
+# Manual builds on Codemagic's personal-account Mac mini M2 allocation.
+# No push triggers, paid machine types, signing secrets or automatic publishing.
+workflows:
+  apple-release:
+    name: SpokenLog v0.1.0 - macOS and unsigned iOS
+    instance_type: mac_mini_m2
+    max_build_duration: 45
+    environment:
+      flutter: 3.47.5
+      xcode: latest
+      cocoapods: default
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/Library/Caches/CocoaPods
+    scripts:
+      - name: Generate Apple runners and preserve locked dependencies
+        script: |
+          set -euo pipefail
+          flutter create . --no-pub --empty --platforms=macos,ios --project-name spokenlog --org io.github.blueb
+          git restore -- pubspec.lock
+          flutter pub get --enforce-lockfile
+          python3 tool/prepare_apple_release.py
+          dart run flutter_launcher_icons -f flutter_launcher_icons_apple.yaml
+      - name: Check shared code and regression tests
+        script: |
+          set -euo pipefail
+          flutter analyze --no-fatal-infos
+          flutter test --reporter expanded
+      - name: Build macOS release
+        script: flutter build macos --release --no-pub
+      - name: Build unsigned iOS device release
+        script: flutter build ios --release --no-pub --no-codesign
+      - name: Package and verify Apple downloads
+        script: |
+          set -euo pipefail
+          mkdir -p dist
+          APP_PATH="build/macos/Build/Products/Release/SpokenLog.app"
+          test -d "$APP_PATH"
+          codesign --deep --force --sign - "$APP_PATH"
+          codesign --verify --deep --strict "$APP_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" dist/SpokenLog-macOS.zip
+          mkdir -p dist/ios-package/Payload
+          ditto build/ios/iphoneos/Runner.app dist/ios-package/Payload/Runner.app
+          (cd dist/ios-package && zip -qry ../SpokenLog-iOS-unsigned.ipa Payload)
+          python3 tool/prepare_apple_release.py --verify-packages
+          (cd dist && shasum -a 256 SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa > SHA256SUMS-Apple.txt)
+    artifacts:
+      - dist/SpokenLog-macOS.zip
+      - dist/SpokenLog-iOS-unsigned.ipa
+      - dist/SHA256SUMS-Apple.txt
+      - dist/BUILD-INFO.json
+      - /tmp/xcodebuild_logs/*.log
