@@ -1,7 +1,7 @@
 name: voice_transcriber
 publish_to: 'none'
 description: SpokenLog - local-first cross-platform recorder and transcription workspace.
-version: 0.1.1+2
+version: 0.1.0+3
 
 environment:
   sdk: '>=3.12.0 <4.0.0'

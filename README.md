@@ -6,7 +6,7 @@ SpokenLog is a local-first, cloud-optional recorder and transcription app. The n
 
 ![SpokenLog workflow](docs/spokenlog-workflow.svg)
 
-> Latest release: **v0.1.1**. Android startup hotfix included. Windows, Android, and macOS are packaged for download; iOS is compiled as an unsigned IPA and requires Apple re-signing before installation. Release assets are reproducibly produced by GitHub Actions.
+> First release: **[v0.1.0](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0)**. The replacement Android and iOS packages remain version 0.1.0 (internal build 3). Android's launcher package is corrected; the iOS IPA remains unsigned and requires Apple signing before installation. See the [release notes](docs/releases/v0.1.0.md) for verification results and Android update-signing precautions.
 
 ## What makes SpokenLog different
 
@@ -163,7 +163,7 @@ Native runners are generated rather than stored in full. The custom `android/app
 From a clean checkout, generate the missing runner files before building:
 
 ```text
-flutter create --no-pub --empty --platforms=android,windows --project-name voice_transcriber .
+flutter create --no-pub --empty --platforms=android,windows --project-name spokenlog --org io.github.blueb .
 git restore -- pubspec.lock
 flutter pub get --enforce-lockfile
 dart run flutter_launcher_icons
@@ -176,14 +176,14 @@ Then validate the shared code and build for the available host toolchain:
 ```text
 flutter analyze --no-fatal-infos
 flutter test
-flutter build apk --debug
+flutter build apk --release
 ```
 
 On Windows, also run `flutter build windows --release`. CI additionally applies the Windows executable/window branding. Generated runner files and build output are ignored; keep `pubspec.lock` and the custom Android manifest in version control.
 
 ### CI and device checks
 
-GitHub Actions analyzes and tests the shared code, builds a Windows release, and compiles an Android debug APK. The current workflow regenerates runners and resolves dependencies afterward; it does not yet preserve the checked-in lockfile across runner generation.
+GitHub Actions analyzes and tests the shared code and builds Windows and Android release artifacts. Runner generation restores the checked-in lockfile before dependency resolution. Manual workflow runs can additionally build macOS and unsigned iOS packages and replace assets on the requested release after every build succeeds. The requested release tag must match `pubspec.yaml`; publishing no longer depends on special commit messages and does not delete an existing release first. Hosted builds require available GitHub Actions budget. Before store distribution, configure persistent production signing; the current Android build uses development signing.
 
 Compilation does not replace real-device checks. Before store distribution, test Android recording, pause/resume, screen-off recording, stopping, permission denial, and interrupted-session recovery on current devices. macOS should also be tested on physical Apple hardware. The iOS GitHub asset is unsigned and is intended for re-signing/testing until official Apple signing is configured.
 
