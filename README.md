@@ -6,7 +6,7 @@ SpokenLog is a local-first, cloud-optional recorder and transcription app. The n
 
 ![SpokenLog workflow](docs/spokenlog-workflow.svg)
 
-> Current beta: **v0.1.0-beta.1**. Windows and Android are the first supported release targets.
+> Current release: **v0.1.0**. Windows, Android, and macOS are packaged for direct download; iOS is also compiled as an unsigned IPA and requires Apple re-signing before installation.
 
 ## What makes SpokenLog different
 
@@ -87,9 +87,10 @@ Automatic detection plus Korean, English, Japanese, Chinese/Cantonese, Spanish, 
 
 ## Platform support
 
-- **Windows** — primary desktop target. Release builds are part of CI validation.
-- **Android** — primary mobile target. Responsive UI, native file picking, microphone permissions, and foreground-recording integration are implemented; native APK validation is still part of the pre-release work.
-- **macOS / iOS** — planned. The shared Flutter code is designed with these platforms in mind, but they are not yet officially supported or build/device-tested.
+- **Windows** — packaged x64 release ZIP with CI build validation.
+- **Android** — packaged release APK with microphone foreground-recording integration.
+- **macOS** — packaged release app ZIP built on macOS CI. The GitHub build is ad-hoc signed rather than Apple-notarized.
+- **iOS** — device release is compiled as an unsigned IPA. Apple requires re-signing with a valid developer certificate/provisioning profile before it can be installed on a physical device.
 - **Linux / Web** — not current release targets.
 
 ## Responsive UI
@@ -184,7 +185,7 @@ On Windows, also run `flutter build windows --release`. CI additionally applies 
 
 GitHub Actions analyzes and tests the shared code, builds a Windows release, and compiles an Android debug APK. The current workflow regenerates runners and resolves dependencies afterward; it does not yet preserve the checked-in lockfile across runner generation.
 
-APK compilation and manifest tests do not verify microphone access or background recording on a device. Before distributing an Android build, test recording, pause/resume, screen-off recording, stopping, and permission denial on a device, including Android 14 or later. macOS and iOS are not included in official build validation.
+Compilation does not replace real-device checks. Before store distribution, test Android recording, pause/resume, screen-off recording, stopping, permission denial, and interrupted-session recovery on current devices. macOS should also be tested on physical Apple hardware. The iOS GitHub asset is unsigned and is intended for re-signing/testing until official Apple signing is configured.
 
 ## Security
 
