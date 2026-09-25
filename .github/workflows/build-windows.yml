@@ -12,8 +12,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  prepare-release:
+    if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create draft prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          if gh release view v0.1.0-beta.1 --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release delete v0.1.0-beta.1 --repo "${{ github.repository }}" --yes --cleanup-tag
+          fi
+          gh release create v0.1.0-beta.1 \
+            --repo "${{ github.repository }}" \
+            --target "${{ github.sha }}" \
+            --title "SpokenLog v0.1.0-beta.1" \
+            --draft \
+            --prerelease \
+            --notes "First beta build of SpokenLog.
+
+          Downloads:
+          - Windows x64: download SpokenLog-Windows-x64.zip, extract it, and run SpokenLog.exe.
+          - Android: download SpokenLog-Android.apk and install it manually.
+
+          This beta focuses on Windows and Android. macOS and iOS are not included yet because they have not completed native build/device validation.
+
+          Highlights:
+          - Local-first recording library
+          - Local or cloud transcription
+          - Local speaker diarization
+          - Editable transcripts and speaker names
+          - Batch transcription
+          - Screen-off Android recording support
+          - Interrupted recording recovery"
+
   build-windows:
+    needs: [prepare-release]
+    if: always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -82,16 +123,25 @@ jobs:
       - name: Build Windows release
         run: flutter build windows --release
 
-      - name: Upload Windows build
-        uses: actions/upload-artifact@v4
-        with:
-          name: SpokenLog-Windows
-          path: build/windows/x64/runner/Release/**
-          if-no-files-found: error
-          retention-days: 7
+      - name: Package Windows release
+        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path "build/windows/x64/runner/Release/*" -DestinationPath "SpokenLog-Windows-x64.zip" -CompressionLevel Optimal
+
+      - name: Upload Windows release asset
+        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: gh release upload v0.1.0-beta.1 "SpokenLog-Windows-x64.zip" --repo "${{ github.repository }}" --clobber
 
   build-android:
+    needs: [prepare-release]
+    if: always() && (needs.prepare-release.result == 'success' || needs.prepare-release.result == 'skipped')
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
@@ -128,67 +178,36 @@ jobs:
       - name: Build Android release APK
         run: flutter build apk --release
 
-      - name: Upload Android build
-        uses: actions/upload-artifact@v4
-        with:
-          name: SpokenLog-Android
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
-          retention-days: 7
+      - name: Package Android release
+        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+        run: cp build/app/outputs/flutter-apk/app-release.apk SpokenLog-Android.apk
+
+      - name: Upload Android release asset
+        if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload v0.1.0-beta.1 SpokenLog-Android.apk --repo "${{ github.repository }}" --clobber
 
 
-  release:
+  finalize-release:
     if: github.event_name == 'push' && github.event.head_commit.message == 'Release v0.1.0-beta.1'
     needs: [build-windows, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Download Windows build
-        uses: actions/download-artifact@v4
-        with:
-          name: SpokenLog-Windows
-          path: dist/windows
-
-      - name: Download Android build
-        uses: actions/download-artifact@v4
-        with:
-          name: SpokenLog-Android
-          path: dist/android
-
-      - name: Package release files
-        shell: bash
+      - name: Download release assets for checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          (cd dist/windows && zip -r ../../SpokenLog-Windows-x64.zip .)
-          cp dist/android/app-release.apk SpokenLog-Android.apk
+          gh release download v0.1.0-beta.1 --repo "${{ github.repository }}" --pattern "SpokenLog-*"
           sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk > SHA256SUMS.txt
+          gh release upload v0.1.0-beta.1 SHA256SUMS.txt --repo "${{ github.repository }}" --clobber
 
-      - name: Create GitHub prerelease
+      - name: Publish prerelease
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh release create v0.1.0-beta.1 \
-            SpokenLog-Windows-x64.zip \
-            SpokenLog-Android.apk \
-            SHA256SUMS.txt \
-            --repo "${{ github.repository }}" \
-            --target "${{ github.sha }}" \
-            --title "SpokenLog v0.1.0-beta.1" \
-            --prerelease \
-            --notes "First public beta build of SpokenLog.
-
-          Downloads:
-          - Windows x64: download SpokenLog-Windows-x64.zip, extract it, and run SpokenLog.exe.
-          - Android: download SpokenLog-Android.apk and install it manually.
-
-          This beta focuses on Windows and Android. macOS and iOS are not included yet because they have not completed native build/device validation.
-
-          Highlights:
-          - Local-first recording library
-          - Local or cloud transcription
-          - Local speaker diarization
-          - Editable transcripts and speaker names
-          - Batch transcription
-          - Screen-off Android recording support
-          - Interrupted recording recovery"
+          release_id=$(gh release view v0.1.0-beta.1 --repo "${{ github.repository }}" --json databaseId --jq .databaseId)
+          gh api --method PATCH "repos/${{ github.repository }}/releases/$release_id" -F draft=false -F prerelease=true >/dev/null
