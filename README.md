@@ -6,7 +6,7 @@ SpokenLog is a local-first, cloud-optional recorder and transcription app. The n
 
 ![SpokenLog workflow](docs/spokenlog-workflow.svg)
 
-> Pre-release project. User-facing version numbers are intentionally not shown yet.
+> Current beta: **v0.1.0-beta.1**. Windows and Android are the first supported release targets.
 
 ## What makes SpokenLog different
 
