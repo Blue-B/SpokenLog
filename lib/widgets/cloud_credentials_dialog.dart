@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'cloud_connection_help.dart';
+
 /// Keeps credential validation and storage failures above the recording sheet.
 class CloudCredentialsDialog extends StatefulWidget {
   const CloudCredentialsDialog({
@@ -85,6 +87,9 @@ class _CloudCredentialsDialogState extends State<CloudCredentialsDialog> {
                           '인증 정보는 기기의 보안 저장소에 저장합니다. 녹음은 전사 버튼을 누를 때만 전송합니다.',
                           'Credentials are stored in secure device storage. Audio is sent only when you request transcription.',
                         )),
+                  const SizedBox(height: 12),
+                  CloudConnectionHelp(cloudflare: widget.needsAccountId,
+                      useEnglish: widget.useEnglish),
                   const SizedBox(height: 18),
                   if (widget.needsAccountId) ...[
                     TextFormField(

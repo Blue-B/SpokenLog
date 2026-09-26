@@ -17,7 +17,8 @@ workflows:
       - name: Generate Apple runners and preserve locked dependencies
         script: |
           set -euo pipefail
-          flutter create . --no-pub --empty --platforms=macos,ios --project-name spokenlog --org io.github.blueb
+          flutter create . --no-pub --empty --platforms=macos,ios \
+            --project-name spokenlog --org io.github.blueb
           git restore -- pubspec.lock
           flutter pub get --enforce-lockfile
           python3 tool/prepare_apple_release.py
@@ -39,12 +40,20 @@ workflows:
           test -d "$APP_PATH"
           codesign --deep --force --sign - "$APP_PATH"
           codesign --verify --deep --strict "$APP_PATH"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" dist/SpokenLog-macOS.zip
+          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" \
+            dist/SpokenLog-macOS.zip
+          cp tool/macos/Uninstall-SpokenLog.command \
+            dist/Uninstall-SpokenLog.command
+          chmod +x dist/Uninstall-SpokenLog.command
+          (cd dist && zip -q SpokenLog-macOS.zip Uninstall-SpokenLog.command)
           mkdir -p dist/ios-package/Payload
-          ditto build/ios/iphoneos/Runner.app dist/ios-package/Payload/Runner.app
-          (cd dist/ios-package && zip -qry ../SpokenLog-iOS-unsigned.ipa Payload)
+          ditto build/ios/iphoneos/Runner.app \
+            dist/ios-package/Payload/Runner.app
+          (cd dist/ios-package && \
+            zip -qry ../SpokenLog-iOS-unsigned.ipa Payload)
           python3 tool/prepare_apple_release.py --verify-packages
-          (cd dist && shasum -a 256 SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa > SHA256SUMS-Apple.txt)
+          (cd dist && shasum -a 256 SpokenLog-macOS.zip \
+            SpokenLog-iOS-unsigned.ipa > SHA256SUMS-Apple.txt)
     artifacts:
       - dist/SpokenLog-macOS.zip
       - dist/SpokenLog-iOS-unsigned.ipa

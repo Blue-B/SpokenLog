@@ -9,6 +9,7 @@ import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:voice_transcriber/models/recording_collection.dart';
 import 'package:voice_transcriber/models/recording_item.dart';
@@ -319,6 +320,7 @@ Future<void> pumpHome(
   required FakeAudioPlayer player,
   Size size = const Size(390, 844),
   double textScale = 1.0,
+  ThemeData? theme,
 }) async {
   tester.view.physicalSize = size;
   tester.view.devicePixelRatio = 1.0;
@@ -327,6 +329,7 @@ Future<void> pumpHome(
 
   await tester.pumpWidget(
     MaterialApp(
+      theme: theme,
       builder: (context, child) => MediaQuery(
         data: MediaQuery.of(context).copyWith(
           textScaler: TextScaler.linear(textScale),
@@ -662,6 +665,67 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
     expect(find.byType(CloudCredentialsDialog), findsOneWidget);
+  });
+
+  for (final scale in [1.0, 1.8]) {
+    testWidgets('recording language label stays inside settings viewport at $scale',
+        (tester) async {
+      const channel = MethodChannel('plugins.flutter.io/path_provider');
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (_) async => tempDir.path);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = FakeAudioPlayer();
+      addTearDown(player.dispose);
+      await pumpHome(tester,
+          recording: FakeRecordingService([buildItem(wavPath)]),
+          settings: FakeSettingsService(), player: player,
+          textScale: scale,
+          theme: ThemeData(inputDecorationTheme: const InputDecorationTheme(
+            border: OutlineInputBorder(),
+          )));
+      await tester.tap(find.byTooltip('표시 언어').first);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.byKey(const ValueKey('settings-transcription')));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.byKey(const ValueKey('settings-transcription')));
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      });
+      await tester.pumpAndSettle();
+      final dialog = find.byType(AlertDialog);
+      expect(dialog, findsOneWidget);
+      final scroll = find.descendant(of: dialog,
+          matching: find.byType(SingleChildScrollView));
+      final label = find.descendant(of: dialog, matching: find.text('녹음 언어'));
+      expect(label, findsOneWidget);
+      expect(tester.getTopLeft(label).dy,
+          greaterThanOrEqualTo(tester.getTopLeft(scroll).dy),
+          reason: 'The floating label must not paint above the clipped viewport');
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('select all respects search and wraps actions at narrow mobile width', (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester, recording: FakeRecordingService([
+      buildItem(wavPath), buildItem(wavPath, id: 'rec-2', title: 'Second clip'),
+    ]), settings: FakeSettingsService(), player: player,
+        size: const Size(320, 844), textScale: 1.8);
+    await tester.tap(find.text('선택'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('select-all-visible')));
+    await tester.pumpAndSettle();
+    expect(find.text('2개 선택'), findsOneWidget);
+    await tester.enterText(find.byType(TextField).first, 'First');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('select-all-visible')));
+    await tester.pumpAndSettle();
+    expect(find.text('1개 선택'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('select-all-visible')));
+    await tester.pumpAndSettle();
+    expect(find.text('0개 선택'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('narrow width and large text scale keep the detail flow usable',

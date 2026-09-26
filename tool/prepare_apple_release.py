@@ -7,11 +7,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-from pathlib import Path
 import plistlib
 import re
 import subprocess
 import zipfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "io.github.blueb.spokenlog"
@@ -92,6 +92,11 @@ def verify_packages() -> None:
         binary = f"SpokenLog.app/Contents/MacOS/{info['CFBundleExecutable']}"
         if len(archive.read(binary)) < 1024:
             raise ValueError("Missing compiled macOS executable")
+        helper = archive.getinfo("Uninstall-SpokenLog.command")
+        if not ((helper.external_attr >> 16) & 0o111):
+            raise ValueError("macOS uninstall helper is not executable")
+        if archive.read(helper) != (ROOT / "tool/macos/Uninstall-SpokenLog.command").read_bytes():
+            raise ValueError("macOS uninstall helper does not match source")
     artifacts = []
     for path in (mac_zip, ipa):
         with path.open("rb") as stream:

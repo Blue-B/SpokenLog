@@ -9,6 +9,7 @@ class AppSettingsSheet extends StatelessWidget {
     required this.onTranscription,
     required this.onDisplayLanguage,
     this.useEnglish = false,
+    this.onStorage,
   });
 
   final VoidCallback onGroq;
@@ -17,6 +18,7 @@ class AppSettingsSheet extends StatelessWidget {
   final VoidCallback onTranscription;
   final VoidCallback onDisplayLanguage;
   final bool useEnglish;
+  final VoidCallback? onStorage;
 
   String _t(String ko, String en) => useEnglish ? en : ko;
 
@@ -86,6 +88,11 @@ class AppSettingsSheet extends StatelessWidget {
                     _t('한국어 · English · 시스템 기본값',
                         '한국어 · English · System default'),
                     onDisplayLanguage),
+                if (onStorage != null)
+                  entry('settings-storage', Icons.storage_rounded,
+                      _t('저장공간 관리', 'Storage management'),
+                      _t('녹음, 모델 정리와 프로그램 제거 안내',
+                          'Recordings, models and uninstall guidance'), onStorage!),
                 const SizedBox(height: 24),
               ],
             ),

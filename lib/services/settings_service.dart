@@ -29,6 +29,19 @@ class SettingsService {
   );
 
 
+  Future<void> clearAppSettings() async {
+    // Delete only this app's keys, not other entries in a shared Keychain.
+    for (final key in const [
+      _providerKey, _groqApiKey, _cloudflareApiToken, _cloudflareAccountId,
+      _groqModelKey, _transcriptionLanguageKey, _speakerDiarizationEnabledKey,
+      _speakerCountKey, _appLanguageKey, _groqUsageDateKey, _groqUsageSecondsKey,
+      _groqRemainingRequestsKey, _groqLimitRequestsKey, _groqQuotaUpdatedAtKey,
+      _cloudflareUsageDateKey, _cloudflareUsageSecondsKey,
+    ]) {
+      await _storage.delete(key: key);
+    }
+  }
+
   Future<String> getAppLanguage() async {
     final value = await _storage.read(key: _appLanguageKey);
     return switch (value) {

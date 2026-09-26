@@ -5,6 +5,26 @@ import 'package:voice_transcriber/services/settings_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
+  test('reset deletes only owned keys, never the entire secure store', () async {
+    const channel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+    final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final calls = <MethodCall>[];
+    messenger.setMockMethodCallHandler(channel, (call) async {
+      calls.add(call);
+      return null;
+    });
+    try {
+      await SettingsService().clearAppSettings();
+      expect(calls, hasLength(16));
+      expect(calls.every((call) => call.method == 'delete'), isTrue);
+      expect(calls.map((call) => call.arguments['key']), containsAll([
+        'groq_api_key', 'cloudflare_api_token', 'cloudflare_account_id',
+        'app_language', 'transcription_provider',
+      ]));
+    } finally {
+      messenger.setMockMethodCallHandler(channel, null);
+    }
+  });
   test('macOS credential storage does not require a provisioning profile', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     const channel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');

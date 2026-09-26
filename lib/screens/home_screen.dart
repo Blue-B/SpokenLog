@@ -33,6 +33,9 @@ import '../widgets/transcript_editor_dialog.dart';
 import '../widgets/mobile_library_widgets.dart';
 import '../widgets/app_settings_sheet.dart';
 import '../widgets/cloud_credentials_dialog.dart';
+import '../widgets/cloud_connection_help.dart';
+import '../widgets/drag_selection_list.dart';
+import '../widgets/storage_management_dialog.dart';
 import '../widgets/recording_details_sheet.dart';
 
 enum _WorkspaceView { records, calendar }
@@ -1296,12 +1299,32 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? _provider : TranscriptionProvider.localSenseVoice)),
                 onTranscription: () => unawaited(_openSettings()),
                 onDisplayLanguage: () => unawaited(_showLanguageSettings()),
+                onStorage: () => unawaited(_showStorageManagement()),
               ),
             ),
           ),
         ),
       ),
     );
+  }
+
+  Future<void> _showStorageManagement() async {
+    if (_loading || _isRecording || _startingRecording || _importingFiles ||
+        _transcribing.isNotEmpty || _pendingTranscription.isNotEmpty || _batchTranscriptionRunning) {
+      _message(_t('녹음, 가져오기, 전사가 끝난 뒤 정리해 주세요.',
+          'Wait for recording, import and transcription to finish.'), error: true);
+      return;
+    }
+    await _stopPlayback();
+    if (!mounted) return;
+    await showDialog<void>(context: context, barrierDismissible: false,
+        builder: (_) => StorageManagementDialog(
+          onClearSettings: _settings.clearAppSettings, useEnglish: _useEnglish));
+    if (!mounted) return;
+    _clearBatchSelection();
+    await _reload();
+    await _loadTranscriptionPreference();
+    await _loadUiPreferences();
   }
 
   Future<void> _showLanguageSettings() async {
@@ -1826,26 +1849,10 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           Widget usagePanel() {
-            if (provider == TranscriptionProvider.groq) {
-              return const _UsagePanel(
-                title: 'Groq 공식 한도 안내',
-                progress: null,
-                primaryText:
-                    '분당 요청 20회 · 하루 요청 2,000회 · 시간당 음성 2시간 · 하루 음성 8시간',
-                secondaryText:
-                    '한도는 계정/조직 설정에 따라 달라질 수 있습니다. '
-                    '정확한 현재 한도는 Groq Console → Settings → Limits에서 확인해 주세요.',
-              );
-            }
-
-            if (provider == TranscriptionProvider.cloudflare) {
-              return const _UsagePanel(
-                title: 'Cloudflare Workers AI 공식 무료 한도',
-                progress: null,
-                primaryText: '10,000 Neurons / 일 무료',
-                secondaryText:
-                    '무료 할당량은 매일 00:00 UTC에 초기화됩니다. '
-                    '정확한 현재 사용량은 Cloudflare Workers AI 대시보드에서 확인해 주세요.',
+            if (!provider.isLocal) {
+              return CloudConnectionHelp(
+                cloudflare: provider == TranscriptionProvider.cloudflare,
+                useEnglish: _useEnglish,
               );
             }
 
@@ -1955,20 +1962,23 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  SwitchListTile(
-                    value: diarizationEnabled,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('로컬 화자 구분'),
-                    subtitle: const Text(
-                      'STT 엔진과 별개로 녹음에서 화자를 분리해 전사 구간에 화자 1, 화자 2처럼 표시합니다.',
+                  Material(
+                    type: MaterialType.transparency,
+                    child: SwitchListTile(
+                      value: diarizationEnabled,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('로컬 화자 구분'),
+                      subtitle: const Text(
+                        'STT 엔진과 별개로 녹음에서 화자를 분리해 전사 구간에 화자 1, 화자 2처럼 표시합니다.',
+                      ),
+                      onChanged: isDownloading
+                          ? null
+                          : (value) {
+                              setLocalState(() {
+                                diarizationEnabled = value;
+                              });
+                            },
                     ),
-                    onChanged: isDownloading
-                        ? null
-                        : (value) {
-                            setLocalState(() {
-                              diarizationEnabled = value;
-                            });
-                          },
                   ),
                   Text(
                     '선택한 STT 엔진과 독립적으로 동작하는 별도 로컬 후처리입니다. '
@@ -2039,6 +2049,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: 190,
                         child: DropdownButtonFormField<int>(
                           initialValue: speakerCount,
+                          isExpanded: true,
                           decoration: const InputDecoration(
                             labelText: '화자 수',
                           ),
@@ -2126,12 +2137,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: SingleChildScrollView(
                   controller: settingsScrollController,
                   primary: false,
-                  padding: const EdgeInsets.only(top: 2),
+                  // Outlined fields paint their floating label above the border.
+                  padding: EdgeInsets.only(
+                    top: MediaQuery.textScalerOf(dialogContext).scale(12),
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     DropdownButtonFormField<TranscriptionLanguage>(
                       initialValue: language,
+                      isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: '녹음 언어',
                         prefixIcon: Icon(Icons.language_rounded),
@@ -2335,6 +2350,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
                         initialValue: groqModelValue,
+                        isExpanded: true,
                         decoration: const InputDecoration(
                           labelText: 'Groq Whisper 모델',
                           prefixIcon:
@@ -2347,6 +2363,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 child: Text(
                                   TranscriptionProvider.groq
                                       .modelLabel(value),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             )
@@ -3059,6 +3077,18 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  void _setBatchSelection(Set<String> ids) {
+    setState(() {
+      _selectionMode = true;
+      _batchSelectedIds..clear()..addAll(ids);
+    });
+  }
+
+  void _selectAllVisible() {
+    final ids = _filteredItems.map((item) => item.id).toSet();
+    _setBatchSelection(ids.every(_batchSelectedIds.contains) ? {} : ids);
+  }
+
   void _clearBatchSelection() {
     setState(() {
       _selectionMode = false;
@@ -3333,8 +3363,9 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Row(
                 children: [
-                  _buildBrand(iconSize: 34),
-                  const Spacer(),
+                  Expanded(child: Align(alignment: Alignment.centerLeft,
+                    child: FittedBox(fit: BoxFit.scaleDown,
+                      child: _buildBrand(iconSize: 34)))),
                   IconButton.filledTonal(
                     tooltip: _t('표시 언어', 'Display language'),
                     onPressed: () => unawaited(_showAppSettings()),
@@ -3489,18 +3520,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: scheme.outlineVariant),
               ),
-              child: Row(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  Expanded(
-                    child: Text(
-                      _t(
-                        '$selectedCount개 선택',
-                        '$selectedCount selected',
-                      ),
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            fontWeight: FontWeight.w800,
-                          ),
-                    ),
+                  Text(_t('$selectedCount개 선택', '$selectedCount selected'),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      fontWeight: FontWeight.w800)),
+                  TextButton(
+                    key: const ValueKey('select-all-visible'),
+                    onPressed: _selectAllVisible,
+                    child: Text(_filteredItems.isNotEmpty &&
+                        _filteredItems.every((item) => _batchSelectedIds.contains(item.id))
+                        ? _t('전체 해제', 'Deselect all') : _t('전체 선택', 'Select all')),
                   ),
                   if (_libraryScope == 'trash') ...[
                     IconButton(
@@ -3580,12 +3611,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
+          if (!_selectionMode && scoped.isNotEmpty)
+            Text(_t('길게 누른 뒤 끌어서 여러 개 선택', 'Hold and drag to select multiple'),
+                style: Theme.of(context).textTheme.bodySmall),
           const SizedBox(height: 11),
           SizedBox(
             height: 42,
             child: TextField(
               controller: _searchController,
-              onChanged: (value) => setState(() => _query = value),
+              onChanged: (value) => setState(() {
+                _query = value;
+                _batchSelectedIds.clear();
+              }),
               style: Theme.of(context).textTheme.bodyMedium,
               decoration: InputDecoration(
                 hintText: _t('제목이나 전사 내용 검색…', 'Search titles or transcripts…'),
@@ -4414,6 +4451,7 @@ class _HomeScreenState extends State<HomeScreen> {
     RecordingItem item, {
     required VoidCallback onTap,
     VoidCallback? onLongPress,
+    bool dragSelection = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
     final selected = _selectedRecordingId == item.id;
@@ -4456,7 +4494,7 @@ class _HomeScreenState extends State<HomeScreen> {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: handleTap,
-          onLongPress: handleLongPress,
+          onLongPress: dragSelection ? null : handleLongPress,
           borderRadius: BorderRadius.circular(12),
           child: Container(
             constraints: BoxConstraints(
@@ -4598,7 +4636,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                     ),
                     const SizedBox(height: 4),
-                    Icon(
+                    if (dragSelection && !_selectionMode)
+                      IconButton(
+                        tooltip: _t('기록 메뉴', 'Recording menu'),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => unawaited(_showRecordingActions(item)),
+                        icon: const Icon(Icons.more_horiz, size: 18),
+                      )
+                    else Icon(
                       item.isDeleted
                           ? Icons.restore_from_trash_outlined
                           : item.hasTranscript
@@ -5551,16 +5596,16 @@ class _HomeScreenState extends State<HomeScreen> {
         Expanded(
           child: items.isEmpty
               ? _buildEmptyState(searchEmpty: _query.isNotEmpty)
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 5),
-                  itemCount: items.length,
+              : DragSelectionList(
+                  ids: items.map((item) => item.id).toList(),
+                  selected: _batchSelectedIds,
+                  onSelectionChanged: _setBatchSelection,
                   itemBuilder: (context, index) {
                     final item = items[index];
                     return _buildCompactRecordingTile(
                       item,
                       onTap: () => unawaited(_showRecordingDetails(item)),
-                      onLongPress: () =>
-                          unawaited(_showRecordingActions(item)),
+                      dragSelection: true,
                     );
                   },
                 ),
@@ -5622,11 +5667,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ? _buildEmptyState(
                                           searchEmpty: _query.isNotEmpty,
                                         )
-                                      : ListView.builder(
-                                          padding: const EdgeInsets.symmetric(
-                                            vertical: 6,
-                                          ),
-                                          itemCount: filtered.length,
+                                      : DragSelectionList(
+                                          ids: filtered.map((item) => item.id).toList(),
+                                          selected: _batchSelectedIds,
+                                          onSelectionChanged: _setBatchSelection,
                                           itemBuilder: (context, index) {
                                             final item = filtered[index];
                                             return _buildCompactRecordingTile(
@@ -5635,9 +5679,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                 () => _selectedRecordingId =
                                                     item.id,
                                               ),
-                                              onLongPress: () => unawaited(
-                                                _showRecordingActions(item),
-                                              ),
+                                              dragSelection: true,
                                             );
                                           },
                                         ),
@@ -6155,11 +6197,13 @@ class _UsagePanel extends StatelessWidget {
             children: [
               const Icon(Icons.data_usage_rounded, size: 19),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+              Expanded(
+                child: Text(
+                  title,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                ),
               ),
             ],
           ),
