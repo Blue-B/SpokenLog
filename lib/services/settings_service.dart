@@ -23,7 +23,10 @@ class SettingsService {
   static const _cloudflareUsageDateKey = 'cloudflare_usage_date';
   static const _cloudflareUsageSecondsKey = 'cloudflare_usage_seconds';
 
-  final FlutterSecureStorage _storage = const FlutterSecureStorage();
+  // Ad-hoc macOS downloads cannot use the provisioning-only shared keychain.
+  final FlutterSecureStorage _storage = const FlutterSecureStorage(
+    mOptions: MacOsOptions(usesDataProtectionKeychain: false),
+  );
 
 
   Future<String> getAppLanguage() async {
