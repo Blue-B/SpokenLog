@@ -21,14 +21,14 @@ enum LocalWavProblem {
 
 extension LocalWavProblemReason on LocalWavProblem {
   String get reason => switch (this) {
-        LocalWavProblem.unreadable => '파일을 읽을 수 없음',
-        LocalWavProblem.notRiffWave => 'RIFF/WAVE 헤더 없음',
-        LocalWavProblem.unsupportedFormat => 'PCM 또는 float32 형식이 아님',
-        LocalWavProblem.unsupportedBitDepth => '8/16/32-bit 샘플이 아님',
-        LocalWavProblem.inconsistentHeader => '헤더의 byte rate/block align 불일치',
-        LocalWavProblem.truncatedAudioData => '데이터 크기보다 파일이 짧음(중단된 녹음)',
-        LocalWavProblem.missingAudioData => '오디오 데이터가 없음',
-      };
+    LocalWavProblem.unreadable => '파일을 읽을 수 없음',
+    LocalWavProblem.notRiffWave => 'RIFF/WAVE 헤더 없음',
+    LocalWavProblem.unsupportedFormat => 'PCM 또는 float32 형식이 아님',
+    LocalWavProblem.unsupportedBitDepth => '8/16/32-bit 샘플이 아님',
+    LocalWavProblem.inconsistentHeader => '헤더의 byte rate/block align 불일치',
+    LocalWavProblem.truncatedAudioData => '데이터 크기보다 파일이 짧음(중단된 녹음)',
+    LocalWavProblem.missingAudioData => '오디오 데이터가 없음',
+  };
 }
 
 const int _maxHeaderBytes = 65536;
@@ -45,11 +45,13 @@ LocalWavProblem? localWavProblemFromHeader(
 }) {
   if (fileLength < 44 || bytes.length < 12) return LocalWavProblem.notRiffWave;
 
-  final isRiff = bytes[0] == 0x52 &&
+  final isRiff =
+      bytes[0] == 0x52 &&
       bytes[1] == 0x49 &&
       bytes[2] == 0x46 &&
       bytes[3] == 0x46;
-  final isWave = bytes[8] == 0x57 &&
+  final isWave =
+      bytes[8] == 0x57 &&
       bytes[9] == 0x41 &&
       bytes[10] == 0x56 &&
       bytes[11] == 0x45;
@@ -96,9 +98,7 @@ LocalWavProblem? localWavProblemFromHeader(
       }
       if (channels <= 0) return LocalWavProblem.unsupportedFormat;
       if (sampleRate <= 0) return LocalWavProblem.unsupportedFormat;
-      if (bitsPerSample != 8 &&
-          bitsPerSample != 16 &&
-          bitsPerSample != 32) {
+      if (bitsPerSample != 8 && bitsPerSample != 16 && bitsPerSample != 32) {
         return LocalWavProblem.unsupportedBitDepth;
       }
 
@@ -106,8 +106,7 @@ LocalWavProblem? localWavProblemFromHeader(
       // match the declared rate, channel count and bit depth.
       final expectedByteRate = sampleRate * channels * bitsPerSample ~/ 8;
       final expectedBlockAlign = channels * bitsPerSample ~/ 8;
-      if (byteRate != expectedByteRate ||
-          blockAlign != expectedBlockAlign) {
+      if (byteRate != expectedByteRate || blockAlign != expectedBlockAlign) {
         return LocalWavProblem.inconsistentHeader;
       }
 
@@ -150,6 +149,74 @@ Future<LocalWavProblem?> localWavProblem(String path) async {
   } finally {
     await handle?.close();
   }
+}
+
+/// Finalizes a stopped, app-created PCM WAV without guessing other formats.
+/// Keeps the original before replacing it with a validated, repaired copy.
+Future<bool> repairInterruptedWav(File file) async {
+  final problem = await localWavProblem(file.path);
+  if (problem == null) return true;
+  if (problem != LocalWavProblem.missingAudioData &&
+      problem != LocalWavProblem.truncatedAudioData)
+    return false;
+
+  final input = await file.open();
+  late Uint8List header;
+  late int length;
+  try {
+    length = await input.length();
+    header = await input.read(length.clamp(0, _maxHeaderBytes));
+  } finally {
+    await input.close();
+  }
+  final data = ByteData.sublistView(header);
+  var offset = 12;
+  int? blockAlign;
+  while (offset + 8 <= header.length) {
+    final id = String.fromCharCodes(header.sublist(offset, offset + 4));
+    final size = data.getUint32(offset + 4, Endian.little);
+    final payload = offset + 8;
+    if (id == 'fmt ') {
+      if (payload + 16 > header.length ||
+          data.getUint16(payload, Endian.little) != 1 ||
+          data.getUint16(payload + 14, Endian.little) != 16)
+        return false;
+      blockAlign = data.getUint16(payload + 12, Endian.little);
+    } else if (id == 'data') {
+      if (blockAlign == null || blockAlign <= 0) return false;
+      final audioBytes = (length - payload) ~/ blockAlign * blockAlign;
+      if (audioBytes <= 0 || payload + audioBytes - 8 > 0xffffffff)
+        return false;
+      data.setUint32(offset + 4, audioBytes, Endian.little);
+      data.setUint32(4, payload + audioBytes - 8, Endian.little);
+      if (localWavProblemFromHeader(header, fileLength: payload + audioBytes) !=
+          null)
+        return false;
+
+      final temp = await file.parent.createTemp('.wav-recovery-');
+      try {
+        final repaired = await file.copy('${temp.path}/audio.wav');
+        final output = await repaired.open(mode: FileMode.append);
+        try {
+          await output.setPosition(0);
+          await output.writeFrom(header, 0, payload);
+          await output.truncate(payload + audioBytes);
+          await output.flush();
+        } finally {
+          await output.close();
+        }
+        if (await localWavProblem(repaired.path) != null) return false;
+        final backup = File('${file.path}.recovery-original');
+        if (!await backup.exists()) await file.copy(backup.path);
+        await repaired.rename(file.path);
+        return true;
+      } finally {
+        await temp.delete(recursive: true);
+      }
+    }
+    offset = payload + size + (size.isOdd ? 1 : 0);
+  }
+  return false;
 }
 
 /// Throws [TranscriptionException] when any path is not a WAV that the local
@@ -200,7 +267,8 @@ void ensureDecodedWaveUsable({
     throw TranscriptionException(
       kind: TranscriptionErrorKind.unsupportedFormat,
       provider: provider,
-      message: '로컬 모델이 오디오를 읽지 못했습니다. '
+      message:
+          '로컬 모델이 오디오를 읽지 못했습니다. '
           '16-bit PCM WAV인지 확인해 주세요.',
     );
   }

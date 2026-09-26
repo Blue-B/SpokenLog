@@ -1,27 +1,23 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:path_provider/path_provider.dart';
 
 import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
+import '../utils/wav_duration.dart';
 
 class PreparedAudioFile {
-  const PreparedAudioFile({
-    required this.path,
-    required this.durationSeconds,
-  });
+  const PreparedAudioFile({required this.path, required this.durationSeconds});
 
   final String path;
   final double durationSeconds;
 }
 
 class PreparedAudioBatch {
-  PreparedAudioBatch({
-    required this.files,
-    this.temporaryDirectory,
-  });
+  PreparedAudioBatch({required this.files, this.temporaryDirectory});
 
   final List<PreparedAudioFile> files;
   final Directory? temporaryDirectory;
@@ -66,8 +62,9 @@ class WavUploadChunkService {
         direct.add(
           PreparedAudioFile(
             path: file.path,
-            durationSeconds:
-                chunk.durationMs > 0 ? chunk.durationMs / 1000 : 0,
+            durationSeconds: isWav
+                ? await readWavDurationMs(file) / 1000
+                : chunk.durationMs / 1000,
           ),
         );
       } else if (isWav) {
@@ -98,28 +95,26 @@ class WavUploadChunkService {
     var directIndex = 0;
     var tempIndex = 0;
 
-    for (final original in recording.chunks) {
-      final file = File(original.audioPath);
-      final size = await file.length();
+    try {
+      for (final original in recording.chunks) {
+        final file = File(original.audioPath);
+        final size = await file.length();
 
-      if (size <= maxUploadBytes) {
-        output.add(direct[directIndex++]);
-        continue;
+        if (size <= maxUploadBytes) {
+          output.add(direct[directIndex++]);
+          continue;
+        }
+
+        final parts = await _splitWav(file, tempDir, startIndex: tempIndex);
+        tempIndex += parts.length;
+        output.addAll(parts);
       }
 
-      final parts = await _splitWav(
-        file,
-        tempDir,
-        startIndex: tempIndex,
-      );
-      tempIndex += parts.length;
-      output.addAll(parts);
+      return PreparedAudioBatch(files: output, temporaryDirectory: tempDir);
+    } catch (_) {
+      await tempDir.delete(recursive: true);
+      rethrow;
     }
-
-    return PreparedAudioBatch(
-      files: output,
-      temporaryDirectory: tempDir,
-    );
   }
 
   Future<List<PreparedAudioFile>> _splitWav(
@@ -132,15 +127,15 @@ class WavUploadChunkService {
     if (info.audioFormat != 1 || info.bitsPerSample != 16) {
       throw const TranscriptionException(
         kind: TranscriptionErrorKind.unsupportedFormat,
-        message:
-            '대용량 WAV의 임시 분할은 현재 PCM 16-bit WAV만 지원합니다.',
+        message: '대용량 WAV의 임시 분할은 현재 PCM 16-bit WAV만 지원합니다.',
       );
     }
 
-    final targetBytes = info.byteRate *
-        targetChunkDuration.inSeconds;
-    final alignedTarget =
-        (targetBytes ~/ info.blockAlign) * info.blockAlign;
+    final targetBytes = min(
+      info.byteRate * targetChunkDuration.inSeconds,
+      maxUploadBytes - 44,
+    );
+    final alignedTarget = (targetBytes ~/ info.blockAlign) * info.blockAlign;
 
     final input = await source.open(mode: FileMode.read);
     final parts = <PreparedAudioFile>[];
@@ -151,10 +146,10 @@ class WavUploadChunkService {
       var partIndex = startIndex;
 
       while (remaining > 0) {
-        final partDataSize =
-            remaining > alignedTarget ? alignedTarget : remaining;
-        final alignedSize =
-            (partDataSize ~/ info.blockAlign) * info.blockAlign;
+        final partDataSize = remaining > alignedTarget
+            ? alignedTarget
+            : remaining;
+        final alignedSize = (partDataSize ~/ info.blockAlign) * info.blockAlign;
         if (alignedSize <= 0) break;
 
         final outputFile = File(
@@ -180,7 +175,13 @@ class WavUploadChunkService {
         while (bytesLeft > 0) {
           final amount = bytesLeft > readSize ? readSize : bytesLeft;
           final bytes = await input.read(amount);
-          if (bytes.isEmpty) break;
+          if (bytes.isEmpty) {
+            await output.close();
+            throw const TranscriptionException(
+              kind: TranscriptionErrorKind.unsupportedFormat,
+              message: 'WAV 오디오 데이터가 잘렸습니다.',
+            );
+          }
           output.add(bytes);
           bytesLeft -= bytes.length;
         }
@@ -249,10 +250,7 @@ class WavUploadChunkService {
         final header = await raf.read(8);
         if (header.length < 8) break;
 
-        final id = ascii.decode(
-          header.sublist(0, 4),
-          allowInvalid: true,
-        );
+        final id = ascii.decode(header.sublist(0, 4), allowInvalid: true);
         final size = ByteData.sublistView(
           Uint8List.fromList(header),
           4,
@@ -290,8 +288,14 @@ class WavUploadChunkService {
           bitsPerSample == null ||
           dataOffset == null ||
           dataSize == null ||
+          channels <= 0 ||
+          sampleRate <= 0 ||
+          byteRate != sampleRate * blockAlign ||
+          blockAlign != channels * bitsPerSample ~/ 8 ||
           byteRate <= 0 ||
-          blockAlign <= 0) {
+          blockAlign <= 0 ||
+          dataSize <= 0 ||
+          dataSize > length - dataOffset) {
         throw const TranscriptionException(
           kind: TranscriptionErrorKind.unsupportedFormat,
           message: 'WAV 헤더를 읽지 못했습니다.',

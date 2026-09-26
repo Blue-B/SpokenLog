@@ -10,6 +10,7 @@ import '../models/recording_item.dart';
 import '../models/transcription_result.dart';
 import '../utils/wav_duration.dart';
 import 'background_recording_service.dart';
+import 'local_wav_input.dart';
 
 class RecordingService {
   static const supportedImportExtensions = <String>[
@@ -27,7 +28,8 @@ class RecordingService {
     );
   }
 
-  final AudioRecorder _recorder = AudioRecorder();
+  AudioRecorder _recorder = AudioRecorder();
+  bool _starting = false;
   final BackgroundRecordingService _background = BackgroundRecordingService();
 
   Directory? _activeSessionDir;
@@ -153,6 +155,18 @@ class RecordingService {
   }
 
   Future<String> start() async {
+    if (_starting || _activeSessionDir != null) {
+      throw Exception('이미 녹음을 시작했거나 녹음 중입니다.');
+    }
+    _starting = true;
+    try {
+      return await _start();
+    } finally {
+      _starting = false;
+    }
+  }
+
+  Future<String> _start() async {
     if (await _recorder.isRecording()) {
       throw Exception('이미 녹음 중입니다.');
     }
@@ -162,11 +176,9 @@ class RecordingService {
 
     final root = await _recordingsDirectory();
     final now = DateTime.now();
-    final sessionId = 'recording_${_stamp(now)}';
-    final sessionDir = Directory(
-      '${root.path}${Platform.pathSeparator}$sessionId',
-    );
-    await sessionDir.create(recursive: true);
+    final sessionDir = await root.createTemp('recording_${_stamp(now)}_');
+    final sessionId = sessionDir.uri.pathSegments
+        .where((part) => part.isNotEmpty).last;
 
     final audioPath =
         '${sessionDir.path}${Platform.pathSeparator}recording.wav';
@@ -196,8 +208,20 @@ class RecordingService {
       _startCheckpointTimer();
       return sessionId;
     } catch (_) {
-      await _background.stop();
-      _resetActiveState();
+      try {
+        try {
+          await _recorder.stop();
+        } catch (_) {
+          await _recorder.dispose();
+          _recorder = AudioRecorder();
+        }
+      } finally {
+        try {
+          await _background.stop();
+        } finally {
+          _resetActiveState();
+        }
+      }
       rethrow;
     }
   }
@@ -260,18 +284,24 @@ class RecordingService {
     try {
       path = await _recorder.stop();
     } catch (_) {
-      path = _activeAudioPath;
+      _stopRequested = false;
+      _activeResumeAt = _paused ? null : DateTime.now();
+      rethrow;
     }
 
     _paused = false;
     if (path != null) _activeAudioPath = path;
 
-    await _writeActiveMetadata(state: 'completed');
-    await _background.stop();
-
-    final sessionPath = dir.path;
-    _resetActiveState();
-    return sessionPath;
+    try {
+      await _writeActiveMetadata(state: 'completed');
+      return dir.path;
+    } finally {
+      try {
+        await _background.stop();
+      } finally {
+        _resetActiveState();
+      }
+    }
   }
 
   void _resetActiveState() {
@@ -398,7 +428,8 @@ class RecordingService {
     audioFiles.sort((a, b) => a.path.compareTo(b.path));
     if (audioFiles.isEmpty) return null;
 
-    if (sessionState == 'recording' || sessionState == 'paused') {
+    if (dir.path != _activeSessionDir?.path &&
+        (sessionState == 'recording' || sessionState == 'paused')) {
       await _recoverInterruptedSession(
         metadataFile: metadataFile,
         metadata: map,
@@ -492,15 +523,19 @@ class RecordingService {
     required List<File> audioFiles,
     required Map<String, int> durations,
   }) async {
+    var recovered = true;
     for (final audio in audioFiles) {
       if (!audio.path.toLowerCase().endsWith('.wav')) continue;
+      if (metadata['imported'] != true && !await repairInterruptedWav(audio)) {
+        recovered = false;
+      }
       final recoveredMs = await readWavDurationMs(audio);
       if (recoveredMs > (durations[audio.uri.pathSegments.last] ?? 0)) {
         durations[audio.uri.pathSegments.last] = recoveredMs;
       }
     }
 
-    metadata['state'] = 'recovered';
+    metadata['state'] = recovered ? 'recovered' : 'recovery_failed';
     metadata['recoveredAt'] = DateTime.now().toIso8601String();
     final rawChunks = metadata['chunks'];
     if (rawChunks is List) {

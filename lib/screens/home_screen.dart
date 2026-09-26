@@ -78,6 +78,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<RecordingItem> _items = const [];
   List<RecordingCollection> _collections = const [];
   bool _isRecording = false;
+  bool _startingRecording = false;
   bool _isPausedRecording = false;
   bool _loading = true;
   bool _importingFiles = false;
@@ -286,10 +287,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _startRecording() async {
+    if (_startingRecording || _isRecording) return;
+    _startingRecording = true;
     try {
       await _stopPlayback();
       await _recording.start();
-      if (!mounted) return;
+      if (!mounted) {
+        await _recording.stop();
+        return;
+      }
 
       setState(() {
         _isRecording = true;
@@ -301,6 +307,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _startRecordingTicker();
     } catch (e) {
       _message(e.toString(), error: true);
+    } finally {
+      _startingRecording = false;
     }
   }
 
@@ -317,6 +325,13 @@ class _HomeScreenState extends State<HomeScreen> {
       await _reload();
       _message('녹음을 안전하게 저장했습니다.');
     } catch (e) {
+      if (!await _recording.isRecording() && mounted) {
+        setState(() {
+          _isRecording = false;
+          _isPausedRecording = false;
+        });
+        _resetRecordingClock();
+      }
       _message(e.toString(), error: true);
     }
   }

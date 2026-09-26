@@ -48,10 +48,9 @@ class CloudflareTranscriptionService {
           result.segments.map((segment) => segment.shifted(offsetSeconds)),
         );
 
-        final duration = result.durationSeconds != null &&
-                result.durationSeconds! > 0
-            ? result.durationSeconds!
-            : file.durationSeconds;
+        final duration = file.durationSeconds > 0
+            ? file.durationSeconds
+            : result.durationSeconds ?? 0;
         offsetSeconds += duration;
         onProgress?.call(i + 1, prepared.files.length);
       }
