@@ -157,8 +157,9 @@ Future<bool> repairInterruptedWav(File file) async {
   final problem = await localWavProblem(file.path);
   if (problem == null) return true;
   if (problem != LocalWavProblem.missingAudioData &&
-      problem != LocalWavProblem.truncatedAudioData)
+      problem != LocalWavProblem.truncatedAudioData) {
     return false;
+  }
 
   final input = await file.open();
   late Uint8List header;
@@ -179,19 +180,22 @@ Future<bool> repairInterruptedWav(File file) async {
     if (id == 'fmt ') {
       if (payload + 16 > header.length ||
           data.getUint16(payload, Endian.little) != 1 ||
-          data.getUint16(payload + 14, Endian.little) != 16)
+          data.getUint16(payload + 14, Endian.little) != 16) {
         return false;
+      }
       blockAlign = data.getUint16(payload + 12, Endian.little);
     } else if (id == 'data') {
       if (blockAlign == null || blockAlign <= 0) return false;
       final audioBytes = (length - payload) ~/ blockAlign * blockAlign;
-      if (audioBytes <= 0 || payload + audioBytes - 8 > 0xffffffff)
+      if (audioBytes <= 0 || payload + audioBytes - 8 > 0xffffffff) {
         return false;
+      }
       data.setUint32(offset + 4, audioBytes, Endian.little);
       data.setUint32(4, payload + audioBytes - 8, Endian.little);
       if (localWavProblemFromHeader(header, fileLength: payload + audioBytes) !=
-          null)
+          null) {
         return false;
+      }
 
       final temp = await file.parent.createTemp('.wav-recovery-');
       try {
