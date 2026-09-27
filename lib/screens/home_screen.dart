@@ -1330,11 +1330,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _showLanguageSettings() async {
     var value = await _settings.getAppLanguage();
     if (!mounted) return;
+    var saving = false;
+    String? saveError;
 
     final saved = await showDialog<String>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
+          scrollable: true,
           title: Text(_t('표시 언어', 'Display language')),
           content: SizedBox(
             width: 430,
@@ -1375,16 +1378,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   onChanged: (next) =>
                       setDialogState(() => value = next ?? value),
                 ),
+                if (saveError != null)
+                  Text(saveError!, style: TextStyle(
+                    color: Theme.of(dialogContext).colorScheme.error,
+                  )),
               ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
+              onPressed: saving ? null : () => Navigator.pop(dialogContext),
               child: Text(_t('취소', 'Cancel')),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, value),
+              onPressed: saving ? null : () async {
+                final selected = value;
+                setDialogState(() { saving = true; saveError = null; });
+                try {
+                  await _settings.setAppLanguage(selected);
+                  if (dialogContext.mounted) {
+                    Navigator.pop(dialogContext, selected);
+                  }
+                } catch (_) {
+                  if (dialogContext.mounted) {
+                    setDialogState(() {
+                      saving = false;
+                      saveError = _t(
+                        '설정을 저장하지 못했습니다. 보안 저장소 잠금과 접근 권한을 확인한 뒤 다시 시도해 주세요.',
+                        'Could not save settings. Check that secure storage is unlocked and accessible, then try again.',
+                      );
+                    });
+                  }
+                }
+              },
               child: Text(_t('저장', 'Save')),
             ),
           ],
@@ -1392,9 +1418,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
 
-    if (saved != null) {
-      await _settings.setAppLanguage(saved);
-      if (!mounted) return;
+    if (saved != null && mounted) {
       _refreshRecordingViews(() => _appLanguage = saved);
     }
   }

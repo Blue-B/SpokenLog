@@ -28,6 +28,7 @@ workflows:
           set -euo pipefail
           flutter analyze --no-fatal-infos
           flutter test --reporter expanded
+          python3 -m unittest discover -s test/tool -p 'test_*.py'
       - name: Build macOS release
         script: flutter build macos --release --no-pub
       - name: Build unsigned iOS device release
@@ -38,7 +39,8 @@ workflows:
           mkdir -p dist
           APP_PATH="build/macos/Build/Products/Release/SpokenLog.app"
           test -d "$APP_PATH"
-          codesign --deep --force --sign - "$APP_PATH"
+          codesign --force --sign - \
+            --entitlements macos/Runner/Release.entitlements "$APP_PATH"
           codesign --verify --deep --strict "$APP_PATH"
           ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" \
             dist/SpokenLog-macOS.zip

@@ -229,6 +229,14 @@ class FakeSettingsService implements SettingsService {
   Future<String> getAppLanguage() async => appLanguage;
 
   @override
+  Future<void> setAppLanguage(String value) async {
+    if (saveShouldThrow) {
+      throw PlatformException(code: '-25308', message: 'sk-super-secret');
+    }
+    appLanguage = value;
+  }
+
+  @override
   Future<bool> getSpeakerDiarizationEnabled() async => false;
 
   @override
@@ -396,6 +404,35 @@ void main() {
     if (await tempDir.exists()) {
       await tempDir.delete(recursive: true);
     }
+  });
+
+  testWidgets('language save failure stays visible and can be retried safely', (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    final settings = FakeSettingsService(saveShouldThrow: true);
+    await pumpHome(tester, recording: FakeRecordingService([]),
+        settings: settings, player: player);
+    await tester.tap(find.byTooltip('표시 언어').first);
+    await tester.pumpAndSettle();
+    final language = find.byKey(const ValueKey('settings-display-language'));
+    await tester.ensureVisible(language);
+    await tester.tap(language);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English'));
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+    expect(find.byType(AlertDialog), findsOneWidget);
+    expect(find.textContaining('설정을 저장하지 못했습니다'), findsOneWidget);
+    expect(find.textContaining('sk-super-secret'), findsNothing);
+    expect(settings.appLanguage, 'ko');
+    expect(tester.takeException(), isNull);
+    settings.saveShouldThrow = false;
+    await tester.tap(find.text('저장'));
+    await tester.pumpAndSettle();
+    expect(settings.appLanguage, 'en');
+    expect(find.byType(AlertDialog), findsNothing);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('synthetic fixture is a readable WAV', (tester) async {

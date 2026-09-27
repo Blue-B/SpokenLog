@@ -10,11 +10,20 @@ import json
 import plistlib
 import re
 import subprocess
+import tempfile
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "io.github.blueb.spokenlog"
+# Keep the existing direct-download app's Documents/Support and login Keychain.
+# Enabling App Sandbox here would silently switch existing users to a container.
+MACOS_ENTITLEMENTS = {
+    "com.apple.security.app-sandbox": False,
+    "com.apple.security.device.audio-input": True,
+    "com.apple.security.network.client": True,
+    "com.apple.security.files.user-selected.read-write": True,
+}
 
 
 def app_version() -> tuple[str, str]:
@@ -46,11 +55,7 @@ def prepare() -> None:
     update_plist(ROOT / "macos/Runner/Info.plist",
                  {"NSMicrophoneUsageDescription": microphone})
     for name in ("DebugProfile.entitlements", "Release.entitlements"):
-        update_plist(ROOT / "macos/Runner" / name, {
-            "com.apple.security.device.audio-input": True,
-            "com.apple.security.network.client": True,
-            "com.apple.security.files.user-selected.read-write": True,
-        })
+        update_plist(ROOT / "macos/Runner" / name, MACOS_ENTITLEMENTS)
     project = (ROOT / "ios/Runner.xcodeproj/project.pbxproj").read_text()
     if f"PRODUCT_BUNDLE_IDENTIFIER = {BUNDLE_ID};" not in project:
         raise ValueError("Unexpected generated iOS bundle identifier")
@@ -61,6 +66,18 @@ def prepare() -> None:
                        "NSMicrophoneUsageDescription": microphone,
                        "UIBackgroundModes": modes})
     print("Apple app identity, microphone and background recording configured.")
+
+
+def verify_macos_signature(app: Path) -> dict:
+    subprocess.run(["codesign", "--verify", "--deep", "--strict", str(app)],
+                   check=True)
+    signed = plistlib.loads(subprocess.check_output(
+        ["codesign", "-d", "--entitlements", ":-", str(app)],
+        stderr=subprocess.PIPE))
+    for key, value in MACOS_ENTITLEMENTS.items():
+        if signed.get(key) is not value:
+            raise ValueError(f"Incorrect signed entitlement: {key}")
+    return signed
 
 
 def verify_packages() -> None:
@@ -97,6 +114,10 @@ def verify_packages() -> None:
             raise ValueError("macOS uninstall helper is not executable")
         if archive.read(helper) != (ROOT / "tool/macos/Uninstall-SpokenLog.command").read_bytes():
             raise ValueError("macOS uninstall helper does not match source")
+    # Inspect what users actually extract, not just the pre-packaging app.
+    with tempfile.TemporaryDirectory(prefix="spokenlog-verify-") as directory:
+        subprocess.run(["ditto", "-x", "-k", str(mac_zip), directory], check=True)
+        entitlements = verify_macos_signature(Path(directory) / "SpokenLog.app")
     artifacts = []
     for path in (mac_zip, ipa):
         with path.open("rb") as stream:
@@ -111,6 +132,7 @@ def verify_packages() -> None:
                                            cwd=ROOT, text=True).strip(),
         "ios_signing": "unsigned; re-sign before installation",
         "macos_signing": "ad-hoc; not notarized",
+        "macos_entitlements": entitlements,
         "physical_device_tests": False,
         "artifacts": artifacts,
     }

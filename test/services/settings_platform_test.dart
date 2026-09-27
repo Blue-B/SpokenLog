@@ -25,7 +25,7 @@ void main() {
       messenger.setMockMethodCallHandler(channel, null);
     }
   });
-  test('macOS credential storage does not require a provisioning profile', () async {
+  test('macOS uses the existing file-based Keychain option', () async {
     debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
     const channel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
     final messenger = TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
