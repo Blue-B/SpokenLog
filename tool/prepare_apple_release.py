@@ -52,8 +52,11 @@ def prepare() -> None:
             raise ValueError(f"Expected one {key} entry in generated runner")
     config.write_text(text)
     microphone = "SpokenLog needs microphone access to record audio."
+    # MetalSDF produced corrupted glyphs on the remote M2 after app restarts.
+    # Use Flutter's supported macOS renderer opt-out, without changing iOS.
     update_plist(ROOT / "macos/Runner/Info.plist",
-                 {"NSMicrophoneUsageDescription": microphone})
+                 {"NSMicrophoneUsageDescription": microphone,
+                  "FLTEnableImpeller": False})
     for name in ("DebugProfile.entitlements", "Release.entitlements"):
         update_plist(ROOT / "macos/Runner" / name, MACOS_ENTITLEMENTS)
     project = (ROOT / "ios/Runner.xcodeproj/project.pbxproj").read_text()
@@ -106,6 +109,8 @@ def verify_packages() -> None:
         for key, value in expected.items():
             if str(info.get(key)) != value:
                 raise ValueError(f"macOS {key} mismatch: {info.get(key)!r}")
+        if info.get("FLTEnableImpeller") is not False:
+            raise ValueError("macOS renderer compatibility setting missing")
         binary = f"SpokenLog.app/Contents/MacOS/{info['CFBundleExecutable']}"
         if len(archive.read(binary)) < 1024:
             raise ValueError("Missing compiled macOS executable")
@@ -133,6 +138,7 @@ def verify_packages() -> None:
         "ios_signing": "unsigned; re-sign before installation",
         "macos_signing": "ad-hoc; not notarized",
         "macos_entitlements": entitlements,
+        "macos_renderer": "Skia (FLTEnableImpeller=false)",
         "physical_device_tests": False,
         "artifacts": artifacts,
     }

@@ -31,6 +31,10 @@ class AppleReleaseTest(unittest.TestCase):
                 path.write_bytes(plistlib.dumps({"com.apple.security.app-sandbox": True}))
             with patch.object(release, "ROOT", root):
                 release.prepare()
+            mac_info = plistlib.loads((root / "macos/Runner/Info.plist").read_bytes())
+            ios_info = plistlib.loads((root / "ios/Runner/Info.plist").read_bytes())
+            self.assertIs(mac_info["FLTEnableImpeller"], False)
+            self.assertNotIn("FLTEnableImpeller", ios_info)
             for name in ("Release.entitlements", "DebugProfile.entitlements"):
                 actual = plistlib.loads((root / "macos/Runner" / name).read_bytes())
                 self.assertEqual(actual, release.MACOS_ENTITLEMENTS)
