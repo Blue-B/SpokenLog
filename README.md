@@ -6,7 +6,54 @@ SpokenLog is a local-first, cloud-optional recorder and transcription app. The n
 
 ![SpokenLog workflow](docs/spokenlog-workflow.svg)
 
-> First release: **[v0.1.0](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0)**. **Android and Windows build 4** include the recording-detail playback, cloud credential setup, settings and library improvements. Windows is built locally and includes its C++ runtime. The unsigned iOS IPA is still build 3 and macOS is unchanged; the manual Codemagic Apple workflow is ready but has not run. See the [release notes](docs/releases/v0.1.0.md) for exact platform status and verification.
+> Current release: **[v0.1.0, build 7](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0)** for Android, Windows, macOS and iOS. The displayed version remains 0.1.0. Read the installation instructions below before downloading, especially on iPhone and iPad. See the [release notes](docs/releases/v0.1.0.md) for verified behavior and remaining test coverage.
+
+## Download and install
+
+Download files from the release linked above. While this repository is private, downloading requires repository access; sharing the release URL alone does not give others access. These are direct-download test packages, not App Store, Google Play or TestFlight releases.
+
+| Platform | File | Installation |
+| --- | --- | --- |
+| Android | `SpokenLog-Android.apk` | Open the APK and, if prompted, allow installation from the browser or file manager used to open it. Android 7.0 or later. |
+| Windows x64 | `SpokenLog-Windows-x64-Setup.exe` | Run the per-user installer. It is not publisher-signed, so Windows may show a security warning. |
+| Windows x64 portable | `SpokenLog-Windows-x64.zip` | Extract the entire ZIP into a new folder, then run `SpokenLog.exe`. Keep the accompanying files together. |
+| macOS | `SpokenLog-macOS.zip` | Extract the ZIP and follow the Mac instructions below. macOS 12 or later. |
+| iPhone / iPad | `SpokenLog-iOS-unsigned.ipa` | Requires signing and sideloading; tapping the downloaded IPA does not install it. iOS / iPadOS 15 or later. |
+
+Only install files from a source you trust. `SHA256SUMS.txt` is provided to check download integrity. Back up important recordings and transcripts before replacing or removing an existing installation. The Android APK currently uses a development signing key; much older APKs signed with a different key may reject an in-place update. Do not uninstall just to work around that error without backing up your data.
+
+### Mac installation
+
+1. Download and extract `SpokenLog-macOS.zip`.
+2. Move `SpokenLog.app` to Applications and try opening it.
+3. If macOS blocks it because the developer cannot be verified, open **System Settings > Privacy & Security** and look for **Open Anyway** for SpokenLog. Approve only if you trust the downloaded copy.
+4. Allow microphone access when you want to record.
+
+The app is ad-hoc signed, not Apple-notarized. This manual installation route does not require a paid Apple developer account or weekly signing renewal. Do not disable Gatekeeper system-wide or bypass a malware warning. See [Apple's instructions for opening an app from an unknown developer](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
+
+The release ZIP was tested on a remote Mac for file import and restart, but the full download-and-approval flow on an ordinary user's Mac remains unverified.
+
+### iPhone and iPad installation
+
+The supplied IPA is unsigned. It cannot be installed directly from Safari or Files. Free installation is possible through third-party tools using your own Apple Account, but it requires setup and ongoing signing renewal. This is a testing option, not a one-tap installation method for general users.
+
+One option is [Sideloadly](https://sideloadly.io/):
+
+1. Install Sideloadly on a Windows PC or Mac and follow its official setup instructions.
+2. Connect your iPhone or iPad by USB and trust the computer when prompted.
+3. Select `SpokenLog-iOS-unsigned.ipa` in Sideloadly and use your own Apple Account to sign and install it.
+4. Follow the tool's instructions to trust your developer profile and enable Developer Mode if required by your iOS version.
+5. Set up signing renewal. With a free account, the app normally expires after 7 days. Sideloadly can refresh it when its background helper is running on your computer and the device is reachable over USB or configured Wi-Fi.
+
+[SideStore](https://docs.sidestore.io/docs/installation/install) is an alternative that allows on-device renewal after initial computer setup. It requires additional setup, including a local VPN app, and does not remove the 7-day limit. Device updates or pairing problems may require a computer again. Free accounts normally allow three active sideloaded apps; SideStore itself occupies one of those slots.
+
+Use only the tools' official downloads and instructions. Do not send your Apple Account password to this project. Keep the same Apple Account and app identifier when updating, and export important recordings before troubleshooting. Deleting the app can delete its local recordings. See the [Sideloadly FAQ](https://sideloadly.io/faq.html) and [SideStore FAQ](https://docs.sidestore.io/docs/faq) for current requirements and limits.
+
+These are documented installation routes, not completed SpokenLog device tests. Installation of this IPA through these tools, real iPhone recording and background behavior remain unverified.
+
+### Future store releases
+
+We plan to publish SpokenLog on the Apple App Store and Google Play when funding and other release requirements allow. This includes production signing, real-device validation and the stores' review requirements. There is no announced release date, and store approval is not guaranteed. Until then, use the direct-download packages with the installation requirements and testing limits described above.
 
 ## What makes SpokenLog different
 
@@ -87,11 +134,13 @@ Automatic detection plus Korean, English, Japanese, Chinese/Cantonese, Spanish, 
 
 ## Platform support
 
-- **Windows** — packaged x64 release ZIP with CI build validation.
-- **Android** — packaged release APK with microphone foreground-recording integration.
-- **macOS** — packaged release app ZIP built on macOS CI. The GitHub build is ad-hoc signed rather than Apple-notarized.
-- **iOS** — device release is compiled as an unsigned IPA. Apple requires re-signing with a valid developer certificate/provisioning profile before it can be installed on a physical device.
-- **Linux / Web** — not current release targets.
+- **Windows**: x64 installer and portable ZIP, built locally for the current release.
+- **Android**: release APK with microphone foreground-recording integration and development signing.
+- **macOS**: app ZIP built on a remote Mac, ad-hoc signed rather than Apple-notarized.
+- **iOS**: unsigned device IPA for re-signing and testing, not direct installation or a store release.
+- **Linux / Web**: not current release targets.
+
+See [Download and install](#download-and-install) for setup instructions and limitations.
 
 ## Responsive UI
 
