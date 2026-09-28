@@ -2,15 +2,6 @@ name: Build SpokenLog
 
 on:
   workflow_dispatch:
-    inputs:
-      publish:
-        description: Replace assets on the requested release after all builds pass
-        type: boolean
-        default: false
-      release_tag:
-        description: Release tag (must match the version in pubspec.yaml)
-        type: string
-        default: v0.1.0
   push:
     branches: [main]
   pull_request:
@@ -36,7 +27,8 @@ jobs:
         shell: bash
         run: |
           flutter config --enable-windows-desktop
-          flutter create . --no-pub --empty --platforms=windows --project-name spokenlog --org io.github.blueb
+          flutter create . --no-pub --empty --platforms=windows \
+            --project-name spokenlog --org io.github.blueb
           git restore -- pubspec.lock
           flutter pub get --enforce-lockfile
       - name: Apply Windows branding
@@ -44,12 +36,18 @@ jobs:
         run: |
           $path = 'windows/CMakeLists.txt'
           $text = Get-Content $path -Raw
-          $text = $text -replace 'cmake_minimum_required\(VERSION 3\.14\)', 'cmake_minimum_required(VERSION 3.15)'
-          $text = $text -replace 'cmake_policy\(VERSION 3\.14\.\.\.3\.25\)', 'cmake_policy(VERSION 3.15...3.25)'
-          $text = $text -replace 'set\(BINARY_NAME "spokenlog"\)', 'set(BINARY_NAME "SpokenLog")'
+          $text = $text -replace `
+            'cmake_minimum_required\(VERSION 3\.14\)', `
+            'cmake_minimum_required(VERSION 3.15)'
+          $text = $text -replace `
+            'cmake_policy\(VERSION 3\.14\.\.\.3\.25\)', `
+            'cmake_policy(VERSION 3.15...3.25)'
+          $text = $text -replace `
+            'set\(BINARY_NAME "spokenlog"\)', 'set(BINARY_NAME "SpokenLog")'
           Set-Content $path $text -NoNewline
           $path = 'windows/runner/main.cpp'
-          $text = (Get-Content $path -Raw) -replace 'L"spokenlog"', 'L"SpokenLog"'
+          $text = (Get-Content $path -Raw) -replace `
+            'L"spokenlog"', 'L"SpokenLog"'
           Set-Content $path $text -NoNewline
       - run: dart run flutter_launcher_icons
       - run: flutter analyze --no-fatal-infos
@@ -57,7 +55,10 @@ jobs:
       - run: flutter build windows --release
       - name: Package Windows
         shell: pwsh
-        run: Compress-Archive -Path 'build/windows/x64/runner/Release/*' -DestinationPath 'SpokenLog-Windows-x64.zip' -CompressionLevel Optimal
+        run: |
+          Compress-Archive -Path 'build/windows/x64/runner/Release/*' `
+            -DestinationPath 'SpokenLog-Windows-x64.zip' `
+            -CompressionLevel Optimal
       - uses: actions/upload-artifact@v4
         with:
           name: SpokenLog-Windows
@@ -74,24 +75,34 @@ jobs:
           cache: true
       - name: Create Android runner without replacing app source
         run: |
-          flutter create . --no-pub --empty --platforms=android --project-name spokenlog --org io.github.blueb
+          flutter create . --no-pub --empty --platforms=android \
+            --project-name spokenlog --org io.github.blueb
           git restore -- pubspec.lock
           flutter pub get --enforce-lockfile
       - name: Verify launcher identity before building
         run: |
-          test -f android/app/src/main/kotlin/io/github/blueb/spokenlog/MainActivity.kt
-          grep -q '^package io.github.blueb.spokenlog$' android/app/src/main/kotlin/io/github/blueb/spokenlog/MainActivity.kt
-          grep -q 'namespace = "io.github.blueb.spokenlog"' android/app/build.gradle.kts
-          grep -q 'applicationId = "io.github.blueb.spokenlog"' android/app/build.gradle.kts
-          grep -q 'android:name=".MainActivity"' android/app/src/main/AndroidManifest.xml
+          test -f \
+            android/app/src/main/kotlin/io/github/blueb/spokenlog/MainActivity.kt
+          grep -q '^package io.github.blueb.spokenlog$' \
+            android/app/src/main/kotlin/io/github/blueb/spokenlog/MainActivity.kt
+          grep -q 'namespace = "io.github.blueb.spokenlog"' \
+            android/app/build.gradle.kts
+          grep -q 'applicationId = "io.github.blueb.spokenlog"' \
+            android/app/build.gradle.kts
+          grep -q 'android:name=".MainActivity"' \
+            android/app/src/main/AndroidManifest.xml
       - run: dart run flutter_launcher_icons
       - run: flutter build apk --release
       - name: Verify APK metadata and signature
         run: |
-          TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          TOOLS=$(find "$ANDROID_HOME/build-tools" \
+            -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           APK=build/app/outputs/flutter-apk/app-release.apk
-          "$TOOLS/aapt" dump badging "$APK" | grep "package: name='io.github.blueb.spokenlog'"
-          "$TOOLS/aapt" dump badging "$APK" | grep "launchable-activity: name='io.github.blueb.spokenlog.MainActivity'"
+          "$TOOLS/aapt" dump badging "$APK" | \
+            grep "package: name='io.github.blueb.spokenlog'"
+          "$TOOLS/aapt" dump badging "$APK" | \
+            grep \
+            "launchable-activity: name='io.github.blueb.spokenlog.MainActivity'"
           "$TOOLS/apksigner" verify "$APK"
           cp "$APK" SpokenLog-Android.apk
       - uses: actions/upload-artifact@v4
@@ -99,90 +110,3 @@ jobs:
           name: SpokenLog-Android
           path: SpokenLog-Android.apk
           if-no-files-found: error
-
-  build-apple:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
-      - name: Create Apple runners without replacing app source
-        run: |
-          flutter create . --no-pub --empty --platforms=macos,ios --project-name spokenlog --org io.github.blueb
-          git restore -- pubspec.lock
-          flutter pub get --enforce-lockfile
-      - name: Configure Apple branding and recording permissions
-        shell: bash
-        run: |
-          sed -i '' 's/^PRODUCT_NAME = .*/PRODUCT_NAME = SpokenLog/' macos/Runner/Configs/AppInfo.xcconfig
-          sed -i '' 's/^PRODUCT_BUNDLE_IDENTIFIER = .*/PRODUCT_BUNDLE_IDENTIFIER = io.github.blueb.spokenlog/' macos/Runner/Configs/AppInfo.xcconfig
-          /usr/libexec/PlistBuddy -c 'Add :NSMicrophoneUsageDescription string SpokenLog needs microphone access to record audio.' macos/Runner/Info.plist
-          for file in macos/Runner/DebugProfile.entitlements macos/Runner/Release.entitlements; do
-            for key in com.apple.security.device.audio-input com.apple.security.network.client com.apple.security.files.user-selected.read-write; do
-              /usr/libexec/PlistBuddy -c "Delete :$key" "$file" >/dev/null 2>&1 || true
-              /usr/libexec/PlistBuddy -c "Add :$key bool true" "$file"
-            done
-          done
-          /usr/libexec/PlistBuddy -c 'Set :CFBundleDisplayName SpokenLog' ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c 'Add :NSMicrophoneUsageDescription string SpokenLog needs microphone access to record audio.' ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c 'Add :UIBackgroundModes array' ios/Runner/Info.plist
-          /usr/libexec/PlistBuddy -c 'Add :UIBackgroundModes:0 string audio' ios/Runner/Info.plist
-          grep -q 'PRODUCT_BUNDLE_IDENTIFIER = io.github.blueb.spokenlog;' ios/Runner.xcodeproj/project.pbxproj
-      - run: dart run flutter_launcher_icons -f flutter_launcher_icons_apple.yaml
-      - run: flutter build macos --release
-      - name: Package macOS
-        run: |
-          APP_PATH=$(find build/macos/Build/Products/Release -maxdepth 1 -name '*.app' -type d | head -1)
-          test -n "$APP_PATH"
-          codesign --deep --force --sign - "$APP_PATH"
-          ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" SpokenLog-macOS.zip
-      - run: flutter build ios --release --no-codesign
-      - name: Verify and package unsigned iOS
-        run: |
-          PLIST=build/ios/iphoneos/Runner.app/Info.plist
-          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$PLIST")" = io.github.blueb.spokenlog
-          mkdir Payload
-          cp -R build/ios/iphoneos/Runner.app Payload/
-          zip -qry SpokenLog-iOS-unsigned.ipa Payload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: SpokenLog-Apple
-          path: |
-            SpokenLog-macOS.zip
-            SpokenLog-iOS-unsigned.ipa
-          if-no-files-found: error
-
-  publish-release:
-    if: github.event_name == 'workflow_dispatch' && inputs.publish
-    needs: [build-windows, build-android, build-apple]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: SpokenLog-*
-          merge-multiple: true
-          path: dist
-      - name: Verify version and update the existing release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        shell: bash
-        run: |
-          VERSION=$(awk '/^version:/ {split($2, v, /[+]/); print v[1]}' pubspec.yaml)
-          test "$RELEASE_TAG" = "v$VERSION"
-          NOTES="$GITHUB_WORKSPACE/docs/releases/$RELEASE_TAG.md"
-          test -f "$NOTES"
-          cd dist
-          sha256sum SpokenLog-Windows-x64.zip SpokenLog-Android.apk SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa > SHA256SUMS.txt
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release create "$RELEASE_TAG" --target "$GITHUB_SHA" --title "SpokenLog $RELEASE_TAG" --draft --notes-file "$NOTES"
-          fi
-          gh release upload "$RELEASE_TAG" SpokenLog-Windows-x64.zip SpokenLog-Android.apk SpokenLog-macOS.zip SpokenLog-iOS-unsigned.ipa SHA256SUMS.txt --clobber
-          gh release edit "$RELEASE_TAG" --title "SpokenLog $RELEASE_TAG" --notes-file "$NOTES" --draft=false --prerelease=false --latest

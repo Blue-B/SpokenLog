@@ -31,9 +31,11 @@ On Windows, also run `flutter build windows --release`. CI additionally applies 
 
 ## CI and device checks
 
-GitHub Actions is configured to analyze and test the shared code and build Windows and Android release artifacts. Runner generation restores the checked-in lockfile before dependency resolution. Manual workflow runs can additionally build macOS and unsigned iOS packages and replace assets on the requested release after every build succeeds. The requested release tag must match `pubspec.yaml`; publishing no longer depends on special commit messages and does not delete an existing release first.
+GitHub Actions analyzes and tests the shared code and builds Windows ZIP and Android APK artifacts. It does not create the Windows installer or publish releases. Runner generation restores the checked-in lockfile before dependency resolution.
 
-Hosted builds require available GitHub Actions budget. The current release used local Windows/Android builds and remote Apple builds; see the [release notes](releases/v0.1.0.md) for provenance. Before store distribution, configure persistent production signing. The current Android build uses development signing.
+For release packaging, use `tool/package_windows.ps1` on Windows and the manual `apple-release` workflow in `codemagic.yaml` for macOS and unsigned iOS. Verify all packages and checksums before uploading them. The older GitHub Actions publishing path has been removed.
+
+Hosted builds require available GitHub Actions budget. The current release used local Windows/Android builds and remote Apple builds; see the [build details](releases/v0.1.0-build8-details.md) for provenance. Before store distribution, configure persistent production signing. The current Android build uses development signing.
 
 Compilation does not replace real-device checks. Before store distribution, test Android recording, pause/resume, screen-off recording, stopping, permission denial and interrupted-session recovery on current devices. macOS should also be tested on physical Apple hardware. The unsigned iOS asset is intended for re-signing and testing until official Apple signing is configured.
 
