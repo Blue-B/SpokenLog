@@ -6,12 +6,10 @@ https://github.com/user-attachments/assets/cf12c70e-a913-4209-887f-9ed36139ffa6
 
 ## Download
 
-[v0.1.0, build 8](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0). Test packages, not store releases. Repository access is required while this project is private.
-
 | Platform | Download | Note |
 | --- | --- | --- |
 | Android 7.0+ | [APK](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-Android.apk) | Development-signed |
-| Windows x64 | [Installer](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-Windows-x64-Setup.exe) / [ZIP](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-Windows-x64.zip) | Unsigned |
+| Windows x64 | [Setup.exe (recommended)](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-Windows-x64-Setup.exe) / [ZIP (no install)](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-Windows-x64.zip) | Unsigned |
 | macOS 12+ | [ZIP](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-macOS.zip) | Not notarized |
 | iOS / iPadOS 15+ | [Unsigned IPA](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-iOS-unsigned.ipa) | Re-signing required; not tap-to-install |
 

@@ -2,7 +2,7 @@
 
 [Back to README](../README.md)
 
-The current release is [v0.1.0, build 8](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0). These are direct-download test packages, not App Store, Google Play or TestFlight releases. While the repository is private, downloads require repository access. Sharing the release URL does not grant access.
+Download a package from the [latest release](https://github.com/Blue-B/SpokenLog/releases/latest) and follow the instructions for your platform.
 
 ## Known issues
 
@@ -10,7 +10,7 @@ Build 8 fixes the Windows build 7 SenseVoice crash caused by loading an incompat
 
 Build 8 includes the demo's single Settings entry and translations for the settings, transcript and playback messages checked during testing. Some errors and less-used paths can still show Korean in English mode. Japanese is a transcription language, not an interface language.
 
-See the [release notes](releases/v0.1.0.md) for current package checks, earlier runtime tests and their limits.
+See the [build details](releases/v0.1.0-build8-details.md) for current package checks, earlier runtime tests and their limits.
 
 ## Choose a package
 
