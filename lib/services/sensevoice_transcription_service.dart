@@ -9,6 +9,7 @@ import '../models/transcription_language.dart';
 import '../models/transcription_result.dart';
 import 'local_wav_input.dart';
 import 'sensevoice_model_manager.dart';
+import 'sherpa_runtime.dart';
 
 class SenseVoiceTranscriptionService {
   SenseVoiceTranscriptionService(this._modelManager);
@@ -152,7 +153,7 @@ class _SenseVoiceDecodeRequest {
 List<Map<String, dynamic>> _decodeSenseVoiceBatch(
   _SenseVoiceDecodeRequest request,
 ) {
-  sherpa.initBindings();
+  initializeSherpaRuntime();
 
   final senseVoice = sherpa.OfflineSenseVoiceModelConfig(
     model: request.modelPath,

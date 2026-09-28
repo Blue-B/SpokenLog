@@ -47,6 +47,9 @@ enum TranscriptionLanguage {
         TranscriptionLanguage.pl => 'Polski',
       };
 
+  String displayLabel({bool useEnglish = false}) =>
+      useEnglish && this == TranscriptionLanguage.auto ? 'Auto detect' : label;
+
   String? get cloudCode => switch (this) {
         TranscriptionLanguage.auto => null,
         TranscriptionLanguage.id => 'id',

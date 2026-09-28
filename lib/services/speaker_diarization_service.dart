@@ -6,6 +6,7 @@ import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
 import '../models/transcription_result.dart';
 import 'speaker_diarization_model_manager.dart';
+import 'sherpa_runtime.dart';
 
 class SpeakerTurn {
   const SpeakerTurn({
@@ -139,7 +140,7 @@ class _DiarizationRequest {
 }
 
 Map<String, dynamic> _runDiarization(_DiarizationRequest request) {
-  sherpa.initBindings();
+  initializeSherpaRuntime();
 
   final segmentation = sherpa.OfflineSpeakerSegmentationModelConfig(
     pyannote: sherpa.OfflineSpeakerSegmentationPyannoteModelConfig(

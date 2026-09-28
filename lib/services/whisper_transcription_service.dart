@@ -9,6 +9,7 @@ import '../models/transcription_language.dart';
 import '../models/transcription_result.dart';
 import 'local_wav_input.dart';
 import 'whisper_model_manager.dart';
+import 'sherpa_runtime.dart';
 
 class WhisperTranscriptionService {
   WhisperTranscriptionService(this._modelManager);
@@ -155,7 +156,7 @@ class _WhisperDecodeRequest {
 List<Map<String, dynamic>> _decodeWhisperBatch(
   _WhisperDecodeRequest request,
 ) {
-  sherpa.initBindings();
+  initializeSherpaRuntime();
 
   final whisper = sherpa.OfflineWhisperModelConfig(
     encoder: request.encoderPath,

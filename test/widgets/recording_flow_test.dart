@@ -15,6 +15,7 @@ import 'package:voice_transcriber/models/recording_collection.dart';
 import 'package:voice_transcriber/models/recording_item.dart';
 import 'package:voice_transcriber/models/transcription_language.dart';
 import 'package:voice_transcriber/models/transcription_provider.dart';
+import 'package:voice_transcriber/models/transcription_result.dart';
 import 'package:voice_transcriber/screens/home_screen.dart';
 import 'package:voice_transcriber/services/recording_service.dart';
 import 'package:voice_transcriber/services/settings_service.dart';
@@ -406,13 +407,57 @@ void main() {
     }
   });
 
+  for (final english in [false, true]) {
+    testWidgets('one settings entry and direct transcription shortcut ($english)',
+        (tester) async {
+      const channel = MethodChannel('plugins.flutter.io/path_provider');
+      final messenger = tester.binding.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(channel, (_) async => tempDir.path);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      final player = FakeAudioPlayer();
+      addTearDown(player.dispose);
+      await pumpHome(tester,
+          recording: FakeRecordingService([buildItem(wavPath, transcript: 'Demo')]),
+          settings: FakeSettingsService(appLanguage: english ? 'en' : 'ko'),
+          player: player, size: const Size(1400, 900));
+      final settingsLabel = english ? 'Settings' : '설정';
+      final languageLabel = english ? 'Display language' : '표시 언어';
+      expect(find.text(settingsLabel), findsOneWidget);
+      expect(find.text(languageLabel), findsNothing);
+      expect(find.text(english ? 'Speech recognition' : '음성 인식 설정'), findsNothing);
+      await tester.tap(find.text(settingsLabel));
+      await tester.pumpAndSettle();
+      expect(find.byType(AppSettingsSheet), findsOneWidget);
+      final language = find.byKey(const ValueKey('settings-display-language'));
+      final cloud = find.byKey(const ValueKey('settings-groq'));
+      expect(tester.getTopLeft(language).dy, lessThan(tester.getTopLeft(cloud).dy));
+      await tester.tap(language);
+      await tester.pumpAndSettle();
+      expect(find.widgetWithText(AlertDialog, languageLabel), findsOneWidget);
+      expect(find.byType(CloudCredentialsDialog), findsNothing);
+      await tester.tap(find.text(english ? 'Cancel' : '취소'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip(english ? 'Close' : '닫기'));
+      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.tap(find.text(english ? 'Transcription settings' : '전사 설정'));
+        await Future<void>.delayed(const Duration(milliseconds: 150));
+      });
+      await tester.pumpAndSettle();
+      expect(find.byType(AppSettingsSheet), findsNothing);
+      expect(find.widgetWithText(AlertDialog,
+          english ? 'Speech recognition settings' : '음성 인식 설정'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('language save failure stays visible and can be retried safely', (tester) async {
     final player = FakeAudioPlayer();
     addTearDown(player.dispose);
     final settings = FakeSettingsService(saveShouldThrow: true);
     await pumpHome(tester, recording: FakeRecordingService([]),
         settings: settings, player: player);
-    await tester.tap(find.byTooltip('표시 언어').first);
+    await tester.tap(find.byTooltip('설정').first);
     await tester.pumpAndSettle();
     final language = find.byKey(const ValueKey('settings-display-language'));
     await tester.ensureVisible(language);
@@ -432,6 +477,67 @@ void main() {
     expect(settings.appLanguage, 'en');
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('Settings'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final provider in [TranscriptionProvider.localSenseVoice,
+      TranscriptionProvider.groq, TranscriptionProvider.cloudflare]) {
+  testWidgets('English $provider settings localize modes, models and actions', (tester) async {
+    const channel = MethodChannel('plugins.flutter.io/path_provider');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (_) async => tempDir.path);
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester,
+        recording: FakeRecordingService([]),
+        settings: FakeSettingsService(appLanguage: 'en',
+            provider: provider),
+        player: player);
+    await tester.tap(find.byTooltip('Settings').first);
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const ValueKey('settings-transcription'));
+    await tester.ensureVisible(entry);
+    await tester.runAsync(() async {
+      await tester.tap(entry);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    });
+    await tester.pumpAndSettle();
+    expect(find.text('Recording language'), findsOneWidget);
+    expect(find.text('Auto detect'), findsWidgets);
+    expect(find.text('Process on this device'), findsOneWidget);
+    expect(find.text('Save settings'), findsOneWidget);
+    expect(find.text('Processing mode'), findsOneWidget);
+    expect(find.text('Cancel'), findsOneWidget);
+    final texts = tester.widgetList<Text>(find.descendant(
+        of: find.byType(AlertDialog), matching: find.byType(Text)))
+        .map((text) => text.data ?? '').where((text) => text != '한국어');
+    expect(texts.where((text) => RegExp('[가-힣]').hasMatch(text)), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  }
+
+  testWidgets('English transcript and active playback labels stay English', (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    final item = buildItem(wavPath, transcript: 'Synthetic demo').copyWith(
+      segments: const [TranscriptSegment(startSeconds: 0, endSeconds: 1,
+          text: 'Synthetic demo')],
+    );
+    await pumpHome(tester,
+        recording: FakeRecordingService([item]),
+        settings: FakeSettingsService(appLanguage: 'en'), player: player,
+        size: const Size(1400, 900));
+    expect(find.text('1 segment'), findsOneWidget);
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('Play').last);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    });
+    player.stateController.add(PlayerState.playing);
+    await tester.pump();
+    expect(find.text('Playing at 1.0×'), findsOneWidget);
+    expect(find.textContaining('재생 중'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
@@ -682,7 +788,7 @@ void main() {
     await pumpHome(tester, recording: recording, settings: settings,
         player: player);
 
-    await tester.tap(find.byTooltip('표시 언어').first);
+    await tester.tap(find.byTooltip('설정').first);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.byType(AppSettingsSheet), findsOneWidget);
@@ -698,6 +804,7 @@ void main() {
     }
 
     // Groq entry opens the credentials dialog directly.
+    await tester.ensureVisible(find.byKey(const ValueKey('settings-groq')));
     await tester.tap(find.byKey(const ValueKey('settings-groq')));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
@@ -720,7 +827,7 @@ void main() {
           theme: ThemeData(inputDecorationTheme: const InputDecorationTheme(
             border: OutlineInputBorder(),
           )));
-      await tester.tap(find.byTooltip('표시 언어').first);
+      await tester.tap(find.byTooltip('설정').first);
       await tester.pumpAndSettle();
       await tester.ensureVisible(find.byKey(const ValueKey('settings-transcription')));
       await tester.pumpAndSettle();

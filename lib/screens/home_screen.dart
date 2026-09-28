@@ -702,8 +702,8 @@ class _HomeScreenState extends State<HomeScreen> {
       _model = model;
       _transcribing.add(item.id);
       _transcribingProgress[item.id] = provider.isLocal
-          ? '기기에서 로컬 전사를 준비하고 있습니다.'
-          : '전사를 준비하고 있습니다.';
+          ? _t('기기에서 로컬 전사를 준비하고 있습니다.', 'Preparing on-device transcription...')
+          : _t('전사를 준비하고 있습니다.', 'Preparing transcription...');
     });
 
     TranscriptionProvider? fallback;
@@ -713,7 +713,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (!mounted) return;
         _refreshRecordingViews(() {
           _transcribingProgress[item.id] =
-              '$completed / $total 조각 전사 완료';
+              _t('$completed / $total 조각 전사 완료', '$completed / $total chunks transcribed');
         });
       }
 
@@ -821,7 +821,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (announceCompletion) {
         _message(
-          '${provider.shortLabel} · ${language.label} 전사가 완료되었습니다.'
+          '${_t('${provider.shortLabel} · ${language.label} 전사가 완료되었습니다.', '${provider.shortLabel} · ${language.displayLabel(useEnglish: true)} transcription complete.')}'
           '$quotaText${diarizationNote ?? ''}',
         );
       }
@@ -1094,7 +1094,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         .map(
                           (entry) => DropdownMenuItem(
                             value: entry,
-                            child: Text(provider.modelLabel(entry)),
+                            child: Text(provider.modelLabel(entry, useEnglish: _useEnglish)),
                           ),
                         )
                         .toList(),
@@ -1532,7 +1532,7 @@ class _HomeScreenState extends State<HomeScreen> {
           } else if (provider == TranscriptionProvider.cloudflare) {
             activeKeyController = cloudflareTokenController;
             keyLabel = 'Cloudflare API Token';
-            keyHint = 'Workers AI 권한이 있는 토큰';
+            keyHint = _t('Workers AI 권한이 있는 토큰', 'Token with Workers AI permission');
           }
 
           final keyRegistered = hasKey[provider] ?? false;
@@ -1579,7 +1579,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   return;
               }
 
-              notice('${target.shortLabel} 모델 설치가 완료되었습니다.');
+              notice(_t('${target.shortLabel} 모델 설치가 완료되었습니다.', '${target.shortLabel} model installed.'));
             } catch (e) {
               notice(
                 '${target.shortLabel} 모델 다운로드에 실패했습니다: $e',
@@ -1633,7 +1633,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               if (!dialogContext.mounted) return;
               setLocalState(() => diarizationInstalled = true);
-              notice('로컬 화자 구분 모델 설치가 완료되었습니다.');
+              notice(_t('로컬 화자 구분 모델 설치가 완료되었습니다.', 'Local speaker models installed.'));
             } catch (e) {
               notice(
                 '화자 구분 모델 다운로드에 실패했습니다: $e',
@@ -1810,16 +1810,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   modeChoice(
                     isLocal: false,
-                    title: '온라인으로 처리',
-                    subtitle: '빠른 처리 · 인터넷 연결 필요',
+                    title: _t('온라인으로 처리', 'Process online'),
+                    subtitle: _t('빠른 처리 · 인터넷 연결 필요', 'Fast processing · Internet required'),
                     icon: Icons.cloud_queue_rounded,
                     expanded: false,
                   ),
                   const SizedBox(height: 8),
                   modeChoice(
                     isLocal: true,
-                    title: '이 기기에서 처리',
-                    subtitle: '음성 외부 전송 없음 · 사용 제한 없음',
+                    title: _t('이 기기에서 처리', 'Process on this device'),
+                    subtitle: _t('음성 외부 전송 없음 · 사용 제한 없음', 'No audio uploads · No usage quota'),
                     icon: Icons.computer_rounded,
                     expanded: false,
                   ),
@@ -1831,15 +1831,15 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 modeChoice(
                   isLocal: false,
-                  title: '온라인으로 처리',
-                  subtitle: '빠른 처리 · 인터넷 연결 필요',
+                  title: _t('온라인으로 처리', 'Process online'),
+                  subtitle: _t('빠른 처리 · 인터넷 연결 필요', 'Fast processing · Internet required'),
                   icon: Icons.cloud_queue_rounded,
                 ),
                 const SizedBox(width: 10),
                 modeChoice(
                   isLocal: true,
-                  title: '이 기기에서 처리',
-                  subtitle: '음성 외부 전송 없음 · 사용 제한 없음',
+                  title: _t('이 기기에서 처리', 'Process on this device'),
+                  subtitle: _t('음성 외부 전송 없음 · 사용 제한 없음', 'No audio uploads · No usage quota'),
                   icon: Icons.computer_rounded,
                 ),
               ],
@@ -1858,6 +1858,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
             return _SttProviderCard(
               provider: value,
+              useEnglish: _useEnglish,
               selected: selected,
               installed: installed,
               supported: supported,
@@ -1880,13 +1881,14 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
 
-            return const _UsagePanel(
-              title: '기기에서 처리',
+            return _UsagePanel(
+              title: _t('기기에서 처리', 'On-device processing'),
               progress: null,
-              primaryText: '전사 횟수와 시간 제한 없음',
-              secondaryText:
+              primaryText: _t('전사 횟수와 시간 제한 없음', 'No transcription count or duration quota'),
+              secondaryText: _t(
                   '인터넷이나 API 키 없이 기기 안에서 처리합니다. '
                   '처리 속도는 기기 성능에 따라 달라질 수 있습니다.',
+                  'Runs on your device without internet or an API key. Speed depends on your hardware.'),
             );
           }
 
@@ -1895,9 +1897,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
             final installed = localInstalled(provider);
             final sizeLabel = switch (provider) {
-              TranscriptionProvider.localSenseVoice => '약 239MB',
-              TranscriptionProvider.localMoonshine => '약 69MB',
-              TranscriptionProvider.localWhisper => '약 104MB',
+              TranscriptionProvider.localSenseVoice => _t('약 239MB', 'about 239 MB'),
+              TranscriptionProvider.localMoonshine => _t('약 69MB', 'about 69 MB'),
+              TranscriptionProvider.localWhisper => _t('약 104MB', 'about 104 MB'),
               _ => '',
             };
             final downloading = downloadingTask == provider.id;
@@ -1926,8 +1928,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         child: Text(
                           installed
-                              ? '${provider.shortLabel} 모델이 설치되어 있습니다.'
-                              : '${provider.shortLabel} 모델 다운로드가 필요합니다 · $sizeLabel',
+                              ? _t('${provider.shortLabel} 모델이 설치되어 있습니다.', '${provider.shortLabel} is installed.')
+                              : _t('${provider.shortLabel} 모델 다운로드가 필요합니다 · $sizeLabel', 'Download ${provider.shortLabel} · $sizeLabel'),
                           style:
                               Theme.of(dialogContext).textTheme.bodyMedium,
                         ),
@@ -1940,8 +1942,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 6),
                     Text(
                       modelProgress == null
-                          ? '다운로드 중...'
-                          : '다운로드 ${(modelProgress! * 100).toStringAsFixed(0)}%',
+                          ? _t('다운로드 중...', 'Downloading...')
+                          : _t('다운로드 ${(modelProgress! * 100).toStringAsFixed(0)}%', 'Downloading ${(modelProgress! * 100).toStringAsFixed(0)}%'),
                       style:
                           Theme.of(dialogContext).textTheme.bodySmall,
                     ),
@@ -1955,7 +1957,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? null
                               : () => installLocalModel(provider),
                           icon: const Icon(Icons.download_rounded),
-                          label: const Text('모델 다운로드'),
+                          label: Text(_t('모델 다운로드', 'Download model')),
                         ),
                       if (installed)
                         OutlinedButton.icon(
@@ -1963,7 +1965,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? null
                               : () => deleteLocalModel(provider),
                           icon: const Icon(Icons.delete_outline_rounded),
-                          label: const Text('모델 삭제'),
+                          label: Text(_t('모델 삭제', 'Remove model')),
                         ),
                     ],
                   ),
@@ -1991,10 +1993,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: SwitchListTile(
                       value: diarizationEnabled,
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('로컬 화자 구분'),
-                      subtitle: const Text(
+                      title: Text(_t('로컬 화자 구분', 'Local speaker separation')),
+                      subtitle: Text(_t(
                         'STT 엔진과 별개로 녹음에서 화자를 분리해 전사 구간에 화자 1, 화자 2처럼 표시합니다.',
-                      ),
+                        'Add labels such as Speaker 1 and Speaker 2 independently of the transcription engine.')),
                       onChanged: isDownloading
                           ? null
                           : (value) {
@@ -2005,10 +2007,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   Text(
-                    '선택한 STT 엔진과 독립적으로 동작하는 별도 로컬 후처리입니다. '
+                    _t('선택한 STT 엔진과 독립적으로 동작하는 별도 로컬 후처리입니다. '
                     'Groq, Cloudflare, SenseVoice, Local Whisper처럼 시간 구간이 있는 결과에 공통 적용되며 '
                     '음성은 화자 구분을 위해 외부 서버로 전송되지 않습니다. '
                     'Moonshine은 현재 시간 구간을 제공하지 않아 화자 라벨이 생략됩니다.',
+                    'Runs locally after transcription, with no audio upload. Works with timestamped results from Groq, Cloudflare, SenseVoice and Local Whisper. Moonshine has no detailed timestamps, so speaker labels are skipped.'),
                     style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -2029,8 +2032,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         child: Text(
                           diarizationInstalled
-                              ? '화자 구분 모델이 설치되어 있습니다.'
-                              : '추가 로컬 모델 다운로드가 필요합니다 · 약 42MB',
+                              ? _t('화자 구분 모델이 설치되어 있습니다.', 'Speaker models are installed.')
+                              : _t('추가 로컬 모델 다운로드가 필요합니다 · 약 42MB', 'Additional local models required · about 42 MB'),
                           style:
                               Theme.of(dialogContext).textTheme.bodySmall,
                         ),
@@ -2043,8 +2046,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 5),
                     Text(
                       modelProgress == null
-                          ? '화자 구분 모델 다운로드 중...'
-                          : '다운로드 ${(modelProgress! * 100).toStringAsFixed(0)}%',
+                          ? _t('화자 구분 모델 다운로드 중...', 'Downloading speaker models...')
+                          : _t('다운로드 ${(modelProgress! * 100).toStringAsFixed(0)}%', 'Downloading ${(modelProgress! * 100).toStringAsFixed(0)}%'),
                       style:
                           Theme.of(dialogContext).textTheme.bodySmall,
                     ),
@@ -2060,27 +2063,27 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPressed:
                               isDownloading ? null : installDiarizationModel,
                           icon: const Icon(Icons.download_rounded),
-                          label: const Text('모델 다운로드'),
+                          label: Text(_t('모델 다운로드', 'Download model')),
                         ),
                       if (diarizationInstalled)
                         OutlinedButton.icon(
                           onPressed:
                               isDownloading ? null : deleteDiarizationModel,
                           icon: const Icon(Icons.delete_outline_rounded),
-                          label: const Text('모델 삭제'),
+                          label: Text(_t('모델 삭제', 'Remove model')),
                         ),
                       SizedBox(
                         width: 190,
                         child: DropdownButtonFormField<int>(
                           initialValue: speakerCount,
                           isExpanded: true,
-                          decoration: const InputDecoration(
-                            labelText: '화자 수',
+                          decoration: InputDecoration(
+                            labelText: _t('화자 수', 'Speaker count'),
                           ),
                           items: [
-                            const DropdownMenuItem(
+                            DropdownMenuItem(
                               value: 0,
-                              child: Text('자동 추정'),
+                              child: Text(_t('자동 추정', 'Automatic')),
                             ),
                             ...List.generate(
                               7,
@@ -2088,7 +2091,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 final count = index + 2;
                                 return DropdownMenuItem(
                                   value: count,
-                                  child: Text('$count명'),
+                                  child: Text(_t('$count명', '$count speakers')),
                                 );
                               },
                             ),
@@ -2171,15 +2174,15 @@ class _HomeScreenState extends State<HomeScreen> {
                     DropdownButtonFormField<TranscriptionLanguage>(
                       initialValue: language,
                       isExpanded: true,
-                      decoration: const InputDecoration(
-                        labelText: '녹음 언어',
-                        prefixIcon: Icon(Icons.language_rounded),
+                      decoration: InputDecoration(
+                        labelText: _t('녹음 언어', 'Recording language'),
+                        prefixIcon: const Icon(Icons.language_rounded),
                       ),
                       items: TranscriptionLanguage.values
                           .map(
                             (value) => DropdownMenuItem(
                               value: value,
-                              child: Text(value.label),
+                              child: Text(value.displayLabel(useEnglish: _useEnglish)),
                             ),
                           )
                           .toList(),
@@ -2228,7 +2231,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      '처리 방식',
+                      _t('처리 방식', 'Processing mode'),
                       style: Theme.of(dialogContext)
                           .textTheme
                           .titleSmall
@@ -2240,7 +2243,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       children: [
                         Text(
-                          showLocalProviders ? '기기 내 모델' : '온라인 서비스',
+                          showLocalProviders ? _t('기기 내 모델', 'Local models') : _t('온라인 서비스', 'Cloud services'),
                           style: Theme.of(dialogContext)
                               .textTheme
                               .titleSmall
@@ -2249,8 +2252,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         const SizedBox(width: 8),
                         _SttMiniBadge(
                           text: showLocalProviders
-                              ? '기기 안에서 처리'
-                              : '인터넷으로 처리',
+                              ? _t('기기 안에서 처리', 'On device')
+                              : _t('인터넷으로 처리', 'Online'),
                         ),
                       ],
                     ),
@@ -2272,10 +2275,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       TextField(
                         controller: cloudflareAccountController,
                         enabled: !isDownloading,
-                        decoration: const InputDecoration(
+                        decoration: InputDecoration(
                           labelText: 'Cloudflare Account ID',
-                          hintText: 'Workers AI 페이지에서 확인할 수 있습니다.',
-                          prefixIcon: Icon(Icons.badge_outlined),
+                          hintText: _t('Workers AI 페이지에서 확인할 수 있습니다.', 'Find it on your Workers AI page.'),
+                          prefixIcon: const Icon(Icons.badge_outlined),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -2292,7 +2295,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           prefixIcon: const Icon(Icons.key_outlined),
                           suffixIcon: IconButton(
                             tooltip:
-                                obscureKey ? 'API 키 표시' : 'API 키 숨기기',
+                                obscureKey ? _t('API 키 표시', 'Show API key') : _t('API 키 숨기기', 'Hide API key'),
                             onPressed: () => setLocalState(
                               () => obscureKey = !obscureKey,
                             ),
@@ -2320,8 +2323,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           Expanded(
                             child: Text(
                               keyRegistered
-                                  ? '인증 정보가 등록되어 있습니다. 새 값을 저장하면 교체됩니다.'
-                                  : '등록된 인증 정보가 없습니다.',
+                                  ? _t('인증 정보가 등록되어 있습니다. 새 값을 저장하면 교체됩니다.', 'Credentials are saved. Saving a new value replaces them.')
+                                  : _t('등록된 인증 정보가 없습니다.', 'No saved credentials.'),
                               style: Theme.of(dialogContext)
                                   .textTheme
                                   .bodySmall,
@@ -2335,21 +2338,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                       context: dialogContext,
                                       builder: (context) => AlertDialog(
                                         title:
-                                            const Text('API 키를 삭제할까요?'),
-                                        content: const Text(
+                                            Text(_t('API 키를 삭제할까요?', 'Delete API key?')),
+                                        content: Text(_t(
                                           '삭제한 키는 복구할 수 없습니다. '
                                           '필요하면 나중에 새 키를 다시 등록할 수 있습니다.',
-                                        ),
+                                          'Deleted keys cannot be recovered. You can add a new key later.')),
                                         actions: [
                                           TextButton(
                                             onPressed: () =>
                                                 Navigator.pop(context, false),
-                                            child: const Text('취소'),
+                                            child: Text(_t('취소', 'Cancel')),
                                           ),
                                           FilledButton(
                                             onPressed: () =>
                                                 Navigator.pop(context, true),
-                                            child: const Text('API 키 삭제'),
+                                            child: Text(_t('API 키 삭제', 'Delete API key')),
                                           ),
                                         ],
                                       ),
@@ -2365,7 +2368,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 : null,
                             icon:
                                 const Icon(Icons.delete_outline_rounded),
-                            label: const Text('키 삭제'),
+                            label: Text(_t('키 삭제', 'Delete key')),
                           ),
                         ],
                       ),
@@ -2375,10 +2378,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       DropdownButtonFormField<String>(
                         initialValue: groqModelValue,
                         isExpanded: true,
-                        decoration: const InputDecoration(
-                          labelText: 'Groq Whisper 모델',
+                        decoration: InputDecoration(
+                          labelText: _t('Groq Whisper 모델', 'Groq Whisper model'),
                           prefixIcon:
-                              Icon(Icons.auto_awesome_outlined),
+                              const Icon(Icons.auto_awesome_outlined),
                         ),
                         items: TranscriptionProvider.groq.models
                             .map(
@@ -2386,7 +2389,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 value: value,
                                 child: Text(
                                   TranscriptionProvider.groq
-                                      .modelLabel(value),
+                                      .modelLabel(value, useEnglish: _useEnglish),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -2413,9 +2416,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 12),
                     Text(
                       provider.isLocal
-                          ? '로컬 전사는 원본 WAV를 기기 안에서 처리합니다.'
-                          : '클라우드 전사는 전사 버튼을 누른 경우에만 녹음 파일을 선택한 서비스로 전송합니다. '
+                          ? _t('로컬 전사는 원본 WAV를 기기 안에서 처리합니다.', 'Local transcription processes the original WAV on your device.')
+                          : _t('클라우드 전사는 전사 버튼을 누른 경우에만 녹음 파일을 선택한 서비스로 전송합니다. '
                               '인증 정보는 OS 보안 저장소에 저장됩니다.',
+                              'Cloud transcription uploads audio only when you start it. Credentials are stored in OS secure storage.'),
                       style:
                           Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                                 color: scheme.onSurfaceVariant,
@@ -2431,13 +2435,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 onPressed: isDownloading
                     ? null
                     : () => Navigator.pop(dialogContext, false),
-                child: const Text('취소'),
+                child: Text(_t('취소', 'Cancel')),
               ),
               FilledButton(
                 onPressed: isDownloading
                     ? null
                     : () => Navigator.pop(dialogContext, true),
-                child: const Text('설정 저장'),
+                child: Text(_t('설정 저장', 'Save settings')),
               ),
             ],
           );
@@ -2482,7 +2486,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       _message(
-        '${provider.label} · ${language.label} 설정이 저장되었습니다.',
+        _t('${provider.label} · ${language.label} 설정이 저장되었습니다.', '${provider.label} · ${language.displayLabel(useEnglish: true)} settings saved.'),
       );
     }
 
@@ -3313,7 +3317,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${_provider.categoryLabel} · ${_provider.shortLabel}',
+                        '${_t(_provider.categoryLabel, _provider.isLocal ? 'Local' : 'Cloud')} · ${_provider.shortLabel}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.labelSmall?.copyWith(
@@ -3323,7 +3327,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 1),
                       Text(
-                        '$model · ${_language.label}',
+                        '$model · ${_language.displayLabel(useEnglish: _useEnglish)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.labelMedium?.copyWith(
@@ -3338,14 +3342,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${_provider.categoryLabel} · ${_provider.shortLabel}',
+                      '${_t(_provider.categoryLabel, _provider.isLocal ? 'Local' : 'Cloud')} · ${_provider.shortLabel}',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                             fontWeight: FontWeight.w600,
                           ),
                     ),
                     Text(
-                      '$model · ${_language.label}',
+                      '$model · ${_language.displayLabel(useEnglish: _useEnglish)}',
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                             fontWeight: FontWeight.w700,
                           ),
@@ -3391,7 +3395,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: FittedBox(fit: BoxFit.scaleDown,
                       child: _buildBrand(iconSize: 34)))),
                   IconButton.filledTonal(
-                    tooltip: _t('표시 언어', 'Display language'),
+                    tooltip: _t('설정', 'Settings'),
                     onPressed: () => unawaited(_showAppSettings()),
                     icon: const Icon(Icons.settings_outlined),
                   ),
@@ -4074,7 +4078,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _pendingTranscription.contains(item.id);
     final active = _activePlayback?.id == item.id;
     final durationText =
-        item.durationMs > 0 ? formatDuration(item.duration) : '길이 확인 중';
+        item.durationMs > 0 ? formatDuration(item.duration) : _t('길이 확인 중', 'Checking duration');
     final bytes = _fileBytes(item);
 
     Widget titleBlock() {
@@ -4381,7 +4385,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                   OutlinedButton.icon(
-                    onPressed: busy ? null : () => unawaited(_showAppSettings()),
+                    onPressed: busy ? null : () => unawaited(_openSettings()),
                     icon: const Icon(Icons.settings_outlined, size: 18),
                     label: Text(_t('전사 설정', 'Transcription settings')),
                   ),
@@ -4414,7 +4418,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.circular(18),
                       ),
                       child: Text(
-                        '$_playbackRate× 재생 중',
+                        _t('$_playbackRate× 재생 중', 'Playing at $_playbackRate×'),
                         style: Theme.of(context).textTheme.labelMedium?.copyWith(
                               color: scheme.onPrimaryContainer,
                               fontWeight: FontWeight.w700,
@@ -4437,7 +4441,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   if (item.segments.isNotEmpty)
                     Text(
-                      '${item.segments.length}개 구간',
+                      _t('${item.segments.length}개 구간', item.segments.length == 1 ? '1 segment' : '${item.segments.length} segments'),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -5012,16 +5016,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Divider(color: scheme.outlineVariant),
           const SizedBox(height: 5),
           navItem(
-            icon: Icons.language_rounded,
-            label: _t('표시 언어', 'Display language'),
+            icon: Icons.settings_outlined,
+            label: _t('설정', 'Settings'),
             selected: false,
             onTap: () => unawaited(_showAppSettings()),
-          ),
-          navItem(
-            icon: Icons.tune_rounded,
-            label: _t('음성 인식 설정', 'Speech recognition'),
-            selected: false,
-            onTap: () => unawaited(_openSettings()),
           ),
           const Spacer(),
           Text(
@@ -6008,8 +6006,11 @@ class _SttProviderCard extends StatelessWidget {
     required this.supported,
     required this.enabled,
     required this.onTap,
+    this.useEnglish = false,
   });
 
+  final bool useEnglish;
+  String _t(String ko, String en) => useEnglish ? en : ko;
   final TranscriptionProvider provider;
   final bool selected;
   final bool? installed;
@@ -6088,23 +6089,23 @@ class _SttProviderCard extends StatelessWidget {
                               .titleSmall
                               ?.copyWith(fontWeight: FontWeight.w700),
                         ),
-                        _SttMiniBadge(text: provider.categoryLabel),
+                        _SttMiniBadge(text: _t(provider.categoryLabel, provider.isLocal ? 'Local' : 'Cloud')),
                         if (provider == TranscriptionProvider.groq)
-                          const _SttMiniBadge(text: '기본 추천'),
+                          _SttMiniBadge(text: _t('기본 추천', 'Recommended')),
                         if (provider ==
                             TranscriptionProvider.localSenseVoice)
-                          const _SttMiniBadge(text: '로컬 추천'),
+                          _SttMiniBadge(text: _t('로컬 추천', 'Local pick')),
                         if (!supported)
-                          const _SttMiniBadge(text: '현재 언어 미지원'),
+                          _SttMiniBadge(text: _t('현재 언어 미지원', 'Language not supported')),
                         if (installed != null)
                           _SttMiniBadge(
-                            text: installed! ? '설치됨' : '다운로드 필요',
+                            text: installed! ? _t('설치됨', 'Installed') : _t('다운로드 필요', 'Download required'),
                           ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      provider.headline,
+                      provider.headlineFor(useEnglish),
                       style: Theme.of(context).textTheme.bodyMedium,
                     ),
                     const SizedBox(height: 7),
@@ -6112,16 +6113,16 @@ class _SttProviderCard extends StatelessWidget {
                       spacing: 6,
                       runSpacing: 5,
                       children: [
-                        _SttMiniBadge(text: '속도 ${provider.speedLabel}'),
+                        _SttMiniBadge(text: _t('속도 ${provider.speedLabel}', 'Speed: ${provider.speedLabelFor(true)}')),
                         _SttMiniBadge(
-                          text: '정확도 ${provider.accuracyLabel}',
+                          text: _t('정확도 ${provider.accuracyLabel}', 'Accuracy: ${provider.accuracyLabelFor(true)}'),
                         ),
-                        _SttMiniBadge(text: provider.privacyLabel),
+                        _SttMiniBadge(text: _t(provider.privacyLabel, provider.isLocal ? 'On device' : 'Cloud upload')),
                       ],
                     ),
                     const SizedBox(height: 7),
                     Text(
-                      provider.quotaLabel,
+                      provider.quotaLabelFor(useEnglish),
                       style: Theme.of(context).textTheme.labelMedium?.copyWith(
                             color: scheme.primary,
                             fontWeight: FontWeight.w600,
@@ -6129,14 +6130,14 @@ class _SttProviderCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 5),
                     Text(
-                      provider.strength,
+                      provider.strengthFor(useEnglish),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      '주의: ${provider.tradeoff}',
+                      _t('주의: ${provider.tradeoff}', 'Note: ${provider.tradeoffFor(true)}'),
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),

@@ -4,13 +4,6 @@ Record audio or import a file, transcribe it, and export the text.
 
 https://github.com/user-attachments/assets/cf12c70e-a913-4209-887f-9ed36139ffa6
 
-<details>
-<summary>GIF preview</summary>
-
-[![SpokenLog demo](docs/images/demo.gif)](docs/images/demo.mp4)
-
-</details>
-
 The demo uses an unreleased local build with Windows crash, translation and Settings fixes. Downloads below are still build 7. [Known issues](docs/installation.md#known-issues).
 
 ## Download

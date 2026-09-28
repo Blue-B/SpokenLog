@@ -200,7 +200,18 @@ enum TranscriptionProvider {
           ],
       };
 
-  String modelLabel(String model) {
+  String modelLabel(String model, {bool useEnglish = false}) {
+    if (useEnglish) {
+      return switch (model) {
+        'whisper-large-v3' => 'Whisper Large V3 · Accuracy',
+        'whisper-large-v3-turbo' => 'Whisper Large V3 Turbo · Speed',
+        '@cf/openai/whisper-large-v3-turbo' => 'Whisper Large V3 Turbo · Cloudflare',
+        'sensevoice-small-int8' => 'SenseVoiceSmall INT8 · East Asian languages',
+        'moonshine-tiny-ko-quantized' => 'Moonshine Tiny KO · Korean',
+        'whisper-tiny-multilingual-int8' => 'Whisper Tiny INT8 · Multilingual',
+        _ => model,
+      };
+    }
     return switch (model) {
       'whisper-large-v3' => 'Whisper Large V3 · 정확도 우선',
       'whisper-large-v3-turbo' => 'Whisper Large V3 Turbo · 속도 우선',
@@ -212,6 +223,48 @@ enum TranscriptionProvider {
       _ => model,
     };
   }
+
+  String headlineFor(bool english) => !english ? headline : switch (this) {
+    TranscriptionProvider.groq => 'Cloud transcription with balanced speed and accuracy',
+    TranscriptionProvider.cloudflare => 'An alternative cloud quota when Groq is unavailable',
+    TranscriptionProvider.localSenseVoice => 'Fast offline transcription for East Asian languages',
+    TranscriptionProvider.localMoonshine => 'Lightweight offline transcription for Korean',
+    TranscriptionProvider.localWhisper => 'General-purpose multilingual offline transcription',
+  };
+
+  String strengthFor(bool english) => !english ? strength : switch (this) {
+    TranscriptionProvider.groq => 'Runs Whisper Large V3/V3 Turbo on Groq. Suitable for long recordings and multilingual transcription.',
+    TranscriptionProvider.cloudflare => 'Runs Whisper Large V3 Turbo on Workers AI, with a quota separate from Groq.',
+    TranscriptionProvider.localSenseVoice => 'Supports Korean, English, Chinese, Japanese and Cantonese, with token timestamps.',
+    TranscriptionProvider.localMoonshine => 'A small Korean-only model, about 69 MB, for CPU and mobile use.',
+    TranscriptionProvider.localWhisper => 'Runs Whisper Tiny Multilingual INT8 on your device for languages beyond SenseVoice and Moonshine.',
+  };
+
+  String tradeoffFor(bool english) => !english ? tradeoff : switch (this) {
+    TranscriptionProvider.groq => 'Requires an API key and is subject to quotas. Audio is sent to Groq.',
+    TranscriptionProvider.cloudflare => 'Requires an Account ID and API token. The free quota is shared across Workers AI.',
+    TranscriptionProvider.localSenseVoice => 'Limited to five languages; may be less accurate than Whisper Large V3. About 239 MB.',
+    TranscriptionProvider.localMoonshine => 'Korean only. Detailed timestamps are not currently available.',
+    TranscriptionProvider.localWhisper => 'About 104 MB. May be slower than SenseVoice and less accurate than larger models. For Cantonese, use Auto or SenseVoice.',
+  };
+
+  String quotaLabelFor(bool english) => !english ? quotaLabel : switch (this) {
+    TranscriptionProvider.groq => 'Free limits: 20 RPM · 2,000 RPD · 2 audio hours/hour · 8/day',
+    TranscriptionProvider.cloudflare => 'Free quota: 10,000 Neurons/day',
+    _ => 'No usage quota · Fully local',
+  };
+
+  String speedLabelFor(bool english) => !english ? speedLabel : switch (this) {
+    TranscriptionProvider.cloudflare => 'Fast',
+    TranscriptionProvider.localWhisper => 'Moderate',
+    _ => 'Very fast',
+  };
+
+  String accuracyLabelFor(bool english) => !english ? accuracyLabel : switch (this) {
+    TranscriptionProvider.groq || TranscriptionProvider.cloudflare => 'High',
+    TranscriptionProvider.localWhisper => 'Moderate',
+    _ => 'Medium-high',
+  };
 
   static TranscriptionProvider fromId(String? value) {
     return switch (value) {

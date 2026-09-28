@@ -10,6 +10,7 @@ import '../models/transcription_provider.dart';
 import '../models/transcription_result.dart';
 import 'local_wav_input.dart';
 import 'moonshine_model_manager.dart';
+import 'sherpa_runtime.dart';
 
 class MoonshineTranscriptionService {
   MoonshineTranscriptionService(this._modelManager);
@@ -134,7 +135,7 @@ class _MoonshineDecodeRequest {
 }
 
 List<String> _decodeMoonshineBatch(_MoonshineDecodeRequest request) {
-  sherpa.initBindings();
+  initializeSherpaRuntime();
 
   final moonshine = sherpa.OfflineMoonshineModelConfig(
     encoder: request.encoderPath,

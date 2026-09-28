@@ -371,6 +371,12 @@ void main() {
         textScale: 1.8,
       );
 
+      expect(find.byKey(const ValueKey('settings-display-language')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.scrollUntilVisible(
+        find.byKey(const ValueKey('settings-groq')), 200,
+        scrollable: find.byType(Scrollable),
+      );
       expect(find.byKey(const ValueKey('settings-groq')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
