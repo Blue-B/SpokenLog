@@ -1,5 +1,7 @@
 # SpokenLog UI Refresh Specification
 
+Historical design notes, retained for reference. These describe an earlier layout, not the current demo. See [current features](../features.md) and [known issues](../installation.md#known-issues).
+
 ## Goals
 - Keep the app visually clean and professional: white/light-gray surfaces with orange used only for primary actions and selection.
 - Make app language, transcription language, quick engine switching, and advanced transcription settings clearly separate.
