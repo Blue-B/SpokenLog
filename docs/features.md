@@ -30,7 +30,7 @@ Imported files are copied into the library. The original file is not modified or
 
 | Engine | Where it runs | Notes |
 | --- | --- | --- |
-| SenseVoiceSmall INT8 | On your device | Korean, English, Chinese, Japanese and Cantonese; includes timestamps. About 239 MB. See the [Windows build 7 issue](installation.md#known-issues). |
+| SenseVoiceSmall INT8 | On your device | Korean, English, Chinese, Japanese and Cantonese; includes timestamps. About 239 MB. See the [Windows fix and testing limits](installation.md#known-issues). |
 | Moonshine Tiny KO | On your device | Korean only. About 69 MB. No detailed timestamp segments. |
 | Whisper Tiny Multilingual INT8 | On your device | Multilingual local option. About 104 MB. |
 | Groq | Cloud | Whisper Large V3 or Large V3 Turbo, using your own API key. |
@@ -44,7 +44,7 @@ The app can fall back to another usable engine after a recoverable provider erro
 
 Interface language and transcription language are separate settings.
 
-The interface has English and Korean display settings. Some settings labels and status messages remain Korean in English mode. There is no Japanese interface in the current release.
+The interface has English and Korean display settings. Build 8 expands the English settings and playback translations; some errors and less-used paths can still show Korean. There is no Japanese interface in the current release.
 
 Transcription offers automatic detection and these language selections:
 

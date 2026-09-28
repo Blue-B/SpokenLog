@@ -2,15 +2,15 @@
 
 [Back to README](../README.md)
 
-The current release is [v0.1.0, build 7](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0). These are direct-download test packages, not App Store, Google Play or TestFlight releases. While the repository is private, downloads require repository access. Sharing the release URL does not grant access.
+The current release is [v0.1.0, build 8](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.0). These are direct-download test packages, not App Store, Google Play or TestFlight releases. While the repository is private, downloads require repository access. Sharing the release URL does not grant access.
 
 ## Known issues
 
-The published Windows build 7 can crash when local SenseVoice loads an incompatible system ONNX Runtime instead of the bundled version. An unreleased local build fixes the load order by opening the bundled runtime first. The synthetic WAV completed transcription in that build, including during the demo. The published downloads have not been replaced. Other engines and platforms have not received equivalent inference testing.
+Build 8 fixes the Windows build 7 SenseVoice crash caused by loading an incompatible system ONNX Runtime. It opens the bundled runtime first. Real transcription of a synthetic WAV passed with the new Windows release DLLs. Other engines and platforms have not received equivalent inference testing.
 
-The published build still has some Korean labels in English mode. The unreleased demo build translates the settings and playback messages found during testing and uses a single Settings entry. Not every error path has been checked. Japanese is a transcription language, not an interface language.
+Build 8 includes the demo's single Settings entry and translations for the settings, transcript and playback messages checked during testing. Some errors and less-used paths can still show Korean in English mode. Japanese is a transcription language, not an interface language.
 
-See the [release notes](releases/v0.1.0.md) for earlier checks and their limits. The findings above were made after those release notes were published.
+See the [release notes](releases/v0.1.0.md) for current package checks, earlier runtime tests and their limits.
 
 ## Choose a package
 
@@ -35,7 +35,7 @@ The Android APK currently uses a development signing key. Much older APKs signed
 
 The app is ad-hoc signed, not Apple-notarized. This manual installation route does not require a paid Apple developer account or weekly signing renewal. Do not disable Gatekeeper system-wide or bypass a malware warning. See [Apple's instructions](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
 
-The release ZIP was tested on a remote Mac for file import and restart. The full download-and-approval flow on an ordinary user's Mac remains unverified.
+The earlier build 7 ZIP was tested on a remote Mac for file import and restart. Build 8 passed package, signature and entitlement checks, but Mac GUI tests were not repeated. The full download-and-approval flow on an ordinary user's Mac remains unverified.
 
 ## iPhone and iPad installation
 
