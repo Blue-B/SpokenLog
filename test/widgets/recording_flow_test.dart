@@ -194,9 +194,32 @@ class FakeSettingsService implements SettingsService {
   @override
   Future<TranscriptionLanguage> getTranscriptionLanguage() async => language;
 
+  final Map<TranscriptionProvider, String> savedModels = {};
+
   @override
   Future<String> getModel(TranscriptionProvider provider) async =>
-      provider.models.first;
+      savedModels[provider] ?? provider.models.first;
+
+  @override
+  Future<void> setModel(TranscriptionProvider provider, String model) async {
+    savedModels[provider] = model;
+  }
+
+  @override
+  Future<void> setProvider(TranscriptionProvider value) async {
+    provider = value;
+  }
+
+  @override
+  Future<void> setTranscriptionLanguage(TranscriptionLanguage value) async {
+    language = value;
+  }
+
+  @override
+  Future<void> setSpeakerDiarizationEnabled(bool value) async {}
+
+  @override
+  Future<void> setSpeakerCount(int value) async {}
 
   @override
   Future<String?> getApiKey(TranscriptionProvider provider) async =>
@@ -558,6 +581,70 @@ void main() {
 
     expect(find.text('Download Whisper · about 161 MB'), findsOneWidget);
     expect(find.text('Download Whisper · about 104 MB'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('a saved Whisper size is the one transcription looks for', (tester) async {
+    const channel = MethodChannel('plugins.flutter.io/path_provider');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (_) async => tempDir.path);
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    final settings = FakeSettingsService(appLanguage: 'en',
+        provider: TranscriptionProvider.localWhisper);
+    await pumpHome(tester,
+        recording: FakeRecordingService([buildItem(wavPath, transcript: null)]),
+        settings: settings, player: player);
+
+    await tester.tap(find.byTooltip('Settings').first);
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const ValueKey('settings-transcription'));
+    await tester.ensureVisible(entry);
+    await tester.runAsync(() async {
+      await tester.tap(entry);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    });
+    await tester.pumpAndSettle();
+
+    final sizeField = find.byType(DropdownButtonFormField<String>);
+    await tester.ensureVisible(sizeField);
+    await tester.pumpAndSettle();
+    await tester.tap(sizeField);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Whisper Base INT8').last);
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 150)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save settings'));
+    await tester.pumpAndSettle();
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 300)));
+    await tester.pumpAndSettle();
+    expect(settings.savedModels[TranscriptionProvider.localWhisper],
+        'whisper-base-multilingual-int8');
+
+    // The settings sheet stays open behind the dialog; close it like a user.
+    await tester.tap(find.byTooltip('Close').first);
+    await tester.pumpAndSettle();
+
+    // Nothing is installed in the test sandbox, so transcription stops with a
+    // message naming the size it looked for. It must be Base, not Tiny.
+    await openRecordingDetails(tester);
+    await tester.tap(find.byKey(const ValueKey('transcribe-rec-1')));
+    await tester.pump();
+    // The service reads the WAV header and model folder from disk, so give the
+    // real event loop time to finish before looking at the message.
+    for (var i = 0; i < 20; i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 150)));
+      await tester.pump(const Duration(milliseconds: 100));
+      if (find.textContaining('Whisper base').evaluate().isNotEmpty) break;
+    }
+    expect(find.textContaining('Whisper base'), findsWidgets);
+    expect(find.textContaining('Whisper tiny'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

@@ -148,6 +148,16 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Reads the saved Whisper size at the moment of use, so a stale manager can
+  /// never send a Base or Small choice to the Tiny model files.
+  Future<TranscriptionResult> _transcribeWithSavedWhisper(
+    RecordingItem item,
+    TranscriptionLanguage language,
+  ) async {
+    await _syncWhisperSize();
+    return _whisper.transcribeRecording(recording: item, language: language);
+  }
+
   Future<void> _loadTranscriptionPreference() async {
     await _syncWhisperSize();
     final provider = await _settings.getProvider();
@@ -718,10 +728,7 @@ class _HomeScreenState extends State<HomeScreen> {
             language: language,
           ),
         TranscriptionProvider.localWhisper =>
-          await _whisper.transcribeRecording(
-            recording: item,
-            language: language,
-          ),
+          await _transcribeWithSavedWhisper(item, language),
       };
 
       String? diarizationNote;
@@ -2451,6 +2458,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       } else if (provider == TranscriptionProvider.localWhisper) {
         await _settings.setModel(provider, whisperModelValue);
+        await _syncWhisperSize();
       } else if (provider == TranscriptionProvider.cloudflare) {
         await _settings.setCloudflareAccountId(
           cloudflareAccountController.text,
