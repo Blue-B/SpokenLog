@@ -22,110 +22,16 @@ void main() {
       }
     });
 
-    test('advertises native auto detection', () {
+    test('accepts auto detection', () {
       expect(
-        TranscriptionProvider.localSenseVoice.supportsAutomaticLanguageDetection,
+        TranscriptionProvider.localSenseVoice
+            .supportsLanguage(TranscriptionLanguage.auto),
         isTrue,
       );
     });
   });
 
-  group('Moonshine Tiny KO', () {
-    test('is Korean-only and never claims auto detection', () {
-      expect(
-        TranscriptionProvider.localMoonshine.supportsLanguage(
-          TranscriptionLanguage.ko,
-        ),
-        isTrue,
-      );
-      expect(
-        TranscriptionProvider.localMoonshine.supportsLanguage(
-          TranscriptionLanguage.auto,
-        ),
-        isFalse,
-      );
-      expect(
-        TranscriptionProvider.localMoonshine
-            .supportsAutomaticLanguageDetection,
-        isFalse,
-      );
-      for (final language in TranscriptionLanguage.values) {
-        final expected = language == TranscriptionLanguage.ko;
-        expect(
-          TranscriptionProvider.localMoonshine.supportsLanguage(language),
-          expected,
-          reason: 'Moonshine/${language.name}',
-        );
-      }
-    });
-
-    test('auto resolves to Korean only after explicit confirmation', () {
-      const provider = TranscriptionProvider.localMoonshine;
-      expect(
-        provider.autoResolvesTo(TranscriptionLanguage.auto),
-        isNull,
-      );
-      expect(
-        provider.autoResolvesTo(
-          TranscriptionLanguage.auto,
-          koreanConfirmed: true,
-        ),
-        TranscriptionLanguage.ko,
-      );
-      expect(
-        provider.autoResolvesTo(TranscriptionLanguage.ko),
-        TranscriptionLanguage.ko,
-      );
-      expect(
-        provider.effectiveLanguage(
-          TranscriptionLanguage.auto,
-          koreanConfirmed: true,
-        ),
-        TranscriptionLanguage.ko,
-      );
-    });
-
-    test('never silently maps another language to Korean', () {
-      const provider = TranscriptionProvider.localMoonshine;
-      for (final language in TranscriptionLanguage.values) {
-        if (language == TranscriptionLanguage.auto ||
-            language == TranscriptionLanguage.ko) {
-          continue;
-        }
-        expect(
-          provider.autoResolvesTo(language, koreanConfirmed: true),
-          isNull,
-          reason: 'Moonshine/${language.name} must not fall back to Korean',
-        );
-        expect(
-          provider.effectiveLanguage(language),
-          isNull,
-          reason: 'Moonshine/${language.name}',
-        );
-      }
-    });
-
-    test('asks for Korean confirmation only for auto', () {
-      const provider = TranscriptionProvider.localMoonshine;
-      expect(
-        provider.needsKoreanConfirmation(TranscriptionLanguage.auto),
-        isTrue,
-      );
-      expect(
-        provider.needsKoreanConfirmation(TranscriptionLanguage.ko),
-        isFalse,
-      );
-      expect(
-        provider.needsKoreanConfirmation(TranscriptionLanguage.en),
-        isFalse,
-      );
-      expect(
-        TranscriptionProvider.localSenseVoice
-            .needsKoreanConfirmation(TranscriptionLanguage.auto),
-        isFalse,
-      );
-    });
-
+  group('Language storage', () {
     test('auto written to storage stays auto, not Korean', () {
       expect(
         TranscriptionLanguage.fromId(TranscriptionLanguage.auto.storageId),
@@ -134,7 +40,7 @@ void main() {
     });
   });
 
-  group('Local Whisper Tiny', () {
+  group('Local Whisper', () {
     test('accepts Whisper language tokens but rejects yue', () {
       // The sherpa-onnx-whisper-tiny metadata language list does not include
       // yue, and passing it aborts the native process.
@@ -158,16 +64,11 @@ void main() {
       );
     });
 
-    test('advertises native auto detection', () {
+    test('accepts auto detection', () {
       expect(
-        TranscriptionProvider.localWhisper.supportsAutomaticLanguageDetection,
+        TranscriptionProvider.localWhisper
+            .supportsLanguage(TranscriptionLanguage.auto),
         isTrue,
-      );
-      expect(
-        TranscriptionProvider.localWhisper.effectiveLanguage(
-          TranscriptionLanguage.auto,
-        ),
-        TranscriptionLanguage.auto,
       );
     });
 

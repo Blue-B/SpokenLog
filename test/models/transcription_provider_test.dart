@@ -16,9 +16,10 @@ void main() {
       TranscriptionProvider.fromId('local_sensevoice'),
       TranscriptionProvider.localSenseVoice,
     );
+    // Moonshine was removed; saved settings move to SenseVoice (Korean-capable).
     expect(
       TranscriptionProvider.fromId('local_moonshine'),
-      TranscriptionProvider.localMoonshine,
+      TranscriptionProvider.localSenseVoice,
     );
     expect(
       TranscriptionProvider.fromId('local_whisper'),
@@ -44,25 +45,20 @@ void main() {
       'sensevoice-small-int8',
     );
     expect(
-      TranscriptionProvider.localMoonshine.models.single,
-      'moonshine-tiny-ko-quantized',
-    );
-    expect(
-      TranscriptionProvider.localWhisper.models.single,
-      'whisper-tiny-multilingual-int8',
+      TranscriptionProvider.localWhisper.models,
+      [
+        'whisper-tiny-multilingual-int8',
+        'whisper-base-multilingual-int8',
+        'whisper-small-multilingual-int8',
+      ],
     );
   });
 
   test('local providers do not require API keys', () {
     expect(TranscriptionProvider.localSenseVoice.isLocal, isTrue);
-    expect(TranscriptionProvider.localMoonshine.isLocal, isTrue);
     expect(TranscriptionProvider.localWhisper.isLocal, isTrue);
     expect(
       TranscriptionProvider.localSenseVoice.requiresApiKey,
-      isFalse,
-    );
-    expect(
-      TranscriptionProvider.localMoonshine.requiresApiKey,
       isFalse,
     );
     expect(
@@ -94,21 +90,6 @@ void main() {
       isFalse,
     );
     expect(
-      TranscriptionProvider.localMoonshine
-          .supportsLanguage(TranscriptionLanguage.ko),
-      isTrue,
-    );
-    expect(
-      TranscriptionProvider.localMoonshine
-          .supportsLanguage(TranscriptionLanguage.auto),
-      isFalse,
-    );
-    expect(
-      TranscriptionProvider.localMoonshine
-          .supportsAutomaticLanguageDetection,
-      isFalse,
-    );
-    expect(
       TranscriptionProvider.localWhisper
           .supportsLanguage(TranscriptionLanguage.es),
       isTrue,
@@ -120,7 +101,7 @@ void main() {
     );
     expect(
       TranscriptionProvider.localWhisper
-          .supportsAutomaticLanguageDetection,
+          .supportsLanguage(TranscriptionLanguage.auto),
       isTrue,
     );
   });

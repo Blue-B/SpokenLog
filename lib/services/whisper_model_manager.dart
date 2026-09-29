@@ -15,44 +15,77 @@ class WhisperModelPaths {
   final String tokens;
 }
 
+/// Multilingual Whisper sizes offered from the sherpa-onnx int8 releases.
+///
+/// [tiny] keeps its original folder name so models installed by earlier
+/// versions are still found.
+enum WhisperModelSize {
+  tiny('tiny', 12937772, 89855401),
+  base('base', 29120534, 130672026),
+  small('small', 112442483, 262226114);
+
+  const WhisperModelSize(this.prefix, this.encoderBytes, this.decoderBytes);
+
+  final String prefix;
+  final int encoderBytes;
+  final int decoderBytes;
+
+  static const int tokensBytes = 816730;
+
+  String get modelId => 'whisper-$prefix-multilingual-int8';
+  String get repository => 'sherpa-onnx-whisper-$prefix';
+  int get totalBytes => encoderBytes + decoderBytes + tokensBytes;
+
+  /// Decimal megabytes, matching what the download servers report.
+  int get downloadMegabytes => (totalBytes / 1000000).round();
+
+  static WhisperModelSize fromModelId(String? id) {
+    for (final size in values) {
+      if (size.modelId == id) return size;
+    }
+    return WhisperModelSize.tiny;
+  }
+}
+
 class WhisperModelManager {
-  static const modelSizeBytes = 104 * 1024 * 1024;
-  static const _baseUrl =
-      'https://huggingface.co/csukuangfj/'
-      'sherpa-onnx-whisper-tiny/resolve/main';
+  WhisperModelManager({this.size = WhisperModelSize.tiny});
+
+  /// The size that [paths], [isInstalled], [download] and [deleteModel] act on.
+  WhisperModelSize size;
+
+  String get _baseUrl =>
+      'https://huggingface.co/csukuangfj/${size.repository}/resolve/main';
 
   Future<Directory> _directory() async {
     final support = await getApplicationSupportDirectory();
     return Directory(
       '${support.path}${Platform.pathSeparator}models'
-      '${Platform.pathSeparator}whisper-tiny-multilingual-int8',
+      '${Platform.pathSeparator}${size.modelId}',
     );
   }
 
   Future<WhisperModelPaths> paths() async {
     final dir = await _directory();
+    final sep = Platform.pathSeparator;
     return WhisperModelPaths(
-      encoder: '${dir.path}${Platform.pathSeparator}tiny-encoder.int8.onnx',
-      decoder: '${dir.path}${Platform.pathSeparator}tiny-decoder.int8.onnx',
-      tokens: '${dir.path}${Platform.pathSeparator}tiny-tokens.txt',
+      encoder: '${dir.path}$sep${size.prefix}-encoder.int8.onnx',
+      decoder: '${dir.path}$sep${size.prefix}-decoder.int8.onnx',
+      tokens: '${dir.path}$sep${size.prefix}-tokens.txt',
     );
+  }
+
+  /// A file counts as complete when it is at least 90% of its published size,
+  /// which rejects interrupted downloads without pinning exact byte counts.
+  Future<bool> _isComplete(String path, int expectedBytes) async {
+    final file = File(path);
+    return await file.exists() && await file.length() >= expectedBytes * 0.9;
   }
 
   Future<bool> isInstalled() async {
     final p = await paths();
-    final encoder = File(p.encoder);
-    final decoder = File(p.decoder);
-    final tokens = File(p.tokens);
-
-    if (!await encoder.exists() ||
-        !await decoder.exists() ||
-        !await tokens.exists()) {
-      return false;
-    }
-
-    return await encoder.length() > 10 * 1024 * 1024 &&
-        await decoder.length() > 80 * 1024 * 1024 &&
-        await tokens.length() > 100 * 1024;
+    return await _isComplete(p.encoder, size.encoderBytes) &&
+        await _isComplete(p.decoder, size.decoderBytes) &&
+        await _isComplete(p.tokens, WhisperModelSize.tokensBytes);
   }
 
   Future<void> download({
@@ -61,36 +94,45 @@ class WhisperModelManager {
     final dir = await _directory();
     await dir.create(recursive: true);
     final p = await paths();
+    final total = size.totalBytes;
+    final encoderShare = size.encoderBytes / total;
+    final decoderShare = size.decoderBytes / total;
 
     try {
       await _downloadFile(
-        Uri.parse('$_baseUrl/tiny-encoder.int8.onnx?download=true'),
+        Uri.parse('$_baseUrl/${size.prefix}-encoder.int8.onnx?download=true'),
         File(p.encoder),
         onProgress: (progress) {
           onProgress?.call(
-            progress == null ? null : progress * 0.13,
+            progress == null ? null : progress * encoderShare,
             'Whisper 인코더를 다운로드하고 있습니다.',
           );
         },
       );
 
       await _downloadFile(
-        Uri.parse('$_baseUrl/tiny-decoder.int8.onnx?download=true'),
+        Uri.parse('$_baseUrl/${size.prefix}-decoder.int8.onnx?download=true'),
         File(p.decoder),
         onProgress: (progress) {
           onProgress?.call(
-            progress == null ? null : 0.13 + progress * 0.86,
+            progress == null
+                ? null
+                : encoderShare + progress * decoderShare,
             'Whisper 디코더를 다운로드하고 있습니다.',
           );
         },
       );
 
       await _downloadFile(
-        Uri.parse('$_baseUrl/tiny-tokens.txt?download=true'),
+        Uri.parse('$_baseUrl/${size.prefix}-tokens.txt?download=true'),
         File(p.tokens),
         onProgress: (progress) {
           onProgress?.call(
-            progress == null ? null : 0.99 + progress * 0.01,
+            progress == null
+                ? null
+                : encoderShare +
+                    decoderShare +
+                    progress * (1 - encoderShare - decoderShare),
             'Whisper 토큰 파일을 준비하고 있습니다.',
           );
         },

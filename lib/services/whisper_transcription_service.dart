@@ -7,9 +7,14 @@ import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
 import '../models/transcription_language.dart';
 import '../models/transcription_result.dart';
+import 'local_audio_windows.dart';
 import 'local_wav_input.dart';
 import 'whisper_model_manager.dart';
 import 'sherpa_runtime.dart';
+
+/// Whisper drops everything past ~29.5 s. Pieces also become subtitle lines,
+/// so they are kept much shorter than that.
+const double _whisperMaxPieceSeconds = 12;
 
 class WhisperTranscriptionService {
   WhisperTranscriptionService(this._modelManager);
@@ -47,22 +52,22 @@ class WhisperTranscriptionService {
       containerHint: 'M4A/MP3/MP4/WebM 파일은 클라우드 전사를 사용해 주세요.',
     );
 
-    if (!language.supportedByWhisperTiny) {
+    if (!language.supportedByWhisper) {
       throw TranscriptionException(
         kind: TranscriptionErrorKind.invalidRequest,
         provider: 'Local Whisper',
         message:
-            'Whisper Tiny 다국어 모델에는 ${language.label} 언어 토큰이 없습니다. '
+            'Whisper 다국어 모델에는 ${language.label} 언어 토큰이 없습니다. '
             '자동 감지를 사용하거나 SenseVoice를 선택해 주세요.',
       );
     }
 
     if (!await _modelManager.isInstalled()) {
-      throw const TranscriptionException(
+      throw TranscriptionException(
         kind: TranscriptionErrorKind.modelNotInstalled,
         provider: 'Local Whisper',
         message:
-            'Whisper Tiny Multilingual 모델이 설치되어 있지 않습니다. '
+            'Whisper ${_modelManager.size.prefix} 모델이 설치되어 있지 않습니다. '
             '전사 설정에서 모델을 먼저 다운로드해 주세요.',
       );
     }
@@ -191,32 +196,67 @@ List<Map<String, dynamic>> _decodeWhisperBatch(
       final durationSeconds = wave.sampleRate > 0
           ? wave.samples.length / wave.sampleRate
           : 0.0;
-      final stream = recognizer.createStream();
 
-      try {
-        stream.acceptWaveform(
-          samples: wave.samples,
-          sampleRate: wave.sampleRate,
-        );
-        recognizer.decode(stream);
-        final result = recognizer.getResult(stream);
+      // Whisper only reads the first 30 s of what it is given and the
+      // sherpa-onnx models return no word times. So the recording is cut at
+      // pauses, each piece is decoded on its own, and the piece's own start and
+      // end become the subtitle times.
+      final texts = <String>[];
+      final segments = <Map<String, dynamic>>[];
+      for (final window in planSpeechWindows(
+        wave.samples,
+        wave.sampleRate,
+        maxSeconds: _whisperMaxPieceSeconds,
+      )) {
+        final samples = wave.samples.sublist(window.start, window.end);
+        final offset = window.start / wave.sampleRate;
+        final pieceSeconds = samples.length / wave.sampleRate;
+        final stream = recognizer.createStream();
 
-        final tokens = List<String>.from(result.tokens);
-        final timestamps =
-            result.timestamps.map((value) => value.toDouble()).toList();
+        try {
+          stream.acceptWaveform(
+            samples: samples,
+            sampleRate: wave.sampleRate,
+          );
+          recognizer.decode(stream);
+          final result = recognizer.getResult(stream);
+          final text = _cleanWhisperText(result.text);
+          if (text.isEmpty) continue;
 
-        outputs.add({
-          'text': result.text.trim(),
-          'duration': durationSeconds,
-          'segments': _buildWhisperTimestampSegments(
-            tokens: tokens,
-            timestamps: timestamps,
-            durationSeconds: durationSeconds,
-          ),
-        });
-      } finally {
-        stream.free();
+          texts.add(text);
+          final timed = _buildWhisperTimestampSegments(
+            tokens: List<String>.from(result.tokens),
+            timestamps:
+                result.timestamps.map((value) => value.toDouble()).toList(),
+            durationSeconds: pieceSeconds,
+          );
+          if (timed.isEmpty) {
+            segments.add({
+              'start': offset,
+              'end': offset + pieceSeconds,
+              'text': text,
+            });
+          } else {
+            segments.addAll(
+              timed.map(
+                (segment) => {
+                  ...segment,
+                  'start': (segment['start'] as double) + offset,
+                  'end': (segment['end'] as double) + offset,
+                },
+              ),
+            );
+          }
+        } finally {
+          stream.free();
+        }
       }
+
+      outputs.add({
+        'text': joinTranscriptPieces(texts),
+        'duration': durationSeconds,
+        'segments': segments,
+      });
     }
   } finally {
     recognizer.free();

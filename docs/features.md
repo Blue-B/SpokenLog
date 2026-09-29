@@ -31,8 +31,7 @@ Imported files are copied into the library. The original file is not modified or
 | Engine | Where it runs | Notes |
 | --- | --- | --- |
 | SenseVoiceSmall INT8 | On your device | Korean, English, Chinese, Japanese and Cantonese; includes timestamps. About 239 MB. See the [Windows fix and testing limits](installation.md#known-issues). |
-| Moonshine Tiny KO | On your device | Korean only. About 69 MB. No detailed timestamp segments. |
-| Whisper Tiny Multilingual INT8 | On your device | Multilingual local option. About 104 MB. |
+| Whisper Multilingual INT8 (Tiny, Base or Small) | On your device | 99 languages except Cantonese. Choose the size in settings: Tiny about 104 MB (fastest), Base about 161 MB, Small about 375 MB (most accurate). The published models give no word times, so subtitle lines come from pauses in the audio (see [Export formats](#export-formats)). |
 | Groq | Cloud | Whisper Large V3 or Large V3 Turbo, using your own API key. |
 | Cloudflare Workers AI | Cloud | Whisper Large V3 Turbo, using your own credentials. |
 
@@ -52,7 +51,7 @@ Transcription offers automatic detection and these language selections:
 - Spanish, French, German, Portuguese, Italian, Russian and Polish
 - Arabic, Hindi, Vietnamese, Ukrainian, Indonesian, Thai, Turkish and Dutch
 
-Available languages depend on the engine. Unsupported engine choices are disabled. Moonshine requires an explicit Korean selection; Whisper Tiny does not support the Cantonese selection.
+Available languages depend on the engine. Unsupported engine choices are disabled. Whisper does not support the Cantonese selection.
 
 ## Local speaker diarization
 
@@ -60,7 +59,7 @@ Speaker diarization separates speakers in a recording. It runs locally after tra
 
 It requires WAV input and about 42 MB of additional models. The speaker count can be automatic or set manually from 2 to 8. Audio is not uploaded for diarization.
 
-It works with timestamped results from Groq, Cloudflare, SenseVoice and Local Whisper. Moonshine has no detailed timestamp segments, so speaker labels are skipped for it.
+It works with timestamped results from Groq, Cloudflare, SenseVoice and Local Whisper.
 
 Labels such as `Speaker 1` and `Speaker 2` distinguish voices within a recording. They do not identify a person's real-world identity. You can rename the speakers afterward.
 
@@ -72,6 +71,21 @@ Labels such as `Speaker 1` and `Speaker 2` distinguish voices within a recording
 | SRT | Subtitle timestamps with speaker labels |
 | VTT | WebVTT subtitles |
 | JSON | Structured transcript and segment metadata |
+
+Subtitle lines follow each engine's segments. SenseVoice, Groq and Cloudflare provide word or segment times. Local Whisper has no word times, so the app cuts the audio at pauses, transcribes each piece separately and uses the piece's start and end as the subtitle time; long recordings are handled this way too, because Whisper reads only the first 30 seconds of what it is given. There is no character-per-line or reading-speed adjustment, so broadcast subtitle rules may need manual work.
+
+## Model licenses
+
+Models are downloaded on request and are not bundled in the app.
+
+| Model | License |
+| --- | --- |
+| Whisper (OpenAI) | MIT |
+| SenseVoiceSmall | FunASR Model Open Source License 1.1: use, copy, modify and share are allowed; the source and author must be credited and the model name kept |
+| pyannote segmentation 3.0 | MIT |
+| 3D-Speaker embedding | The 3D-Speaker project is Apache-2.0; the individual model card was not checked separately |
+
+Earlier builds also offered Moonshine Tiny KO. Moonshine's non-English models use a community license that is free for research, non-commercial use and organizations under US$1 million annual revenue, with a separate commercial license required above that, so it was removed to keep the app clear of those conditions.
 
 ## Cloud usage display
 

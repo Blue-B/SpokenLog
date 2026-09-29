@@ -9,6 +9,7 @@ class SettingsService {
   static const _cloudflareApiToken = 'cloudflare_api_token';
   static const _cloudflareAccountId = 'cloudflare_account_id';
   static const _groqModelKey = 'groq_whisper_model';
+  static const _whisperModelKey = 'local_whisper_model';
   static const _transcriptionLanguageKey = 'transcription_language';
   static const _speakerDiarizationEnabledKey = 'speaker_diarization_enabled';
   static const _speakerCountKey = 'speaker_count';
@@ -33,7 +34,7 @@ class SettingsService {
     // Delete only this app's keys, not other entries in a shared Keychain.
     for (final key in const [
       _providerKey, _groqApiKey, _cloudflareApiToken, _cloudflareAccountId,
-      _groqModelKey, _transcriptionLanguageKey, _speakerDiarizationEnabledKey,
+      _groqModelKey, _whisperModelKey, _transcriptionLanguageKey, _speakerDiarizationEnabledKey,
       _speakerCountKey, _appLanguageKey, _groqUsageDateKey, _groqUsageSecondsKey,
       _groqRemainingRequestsKey, _groqLimitRequestsKey, _groqQuotaUpdatedAtKey,
       _cloudflareUsageDateKey, _cloudflareUsageSecondsKey,
@@ -74,7 +75,6 @@ class SettingsService {
       TranscriptionProvider.cloudflare =>
         _storage.read(key: _cloudflareApiToken),
       TranscriptionProvider.localSenseVoice ||
-      TranscriptionProvider.localMoonshine ||
       TranscriptionProvider.localWhisper => Future.value(null),
     };
   }
@@ -297,11 +297,14 @@ class SettingsService {
   }
 
   Future<String> getModel(TranscriptionProvider provider) async {
-    if (provider != TranscriptionProvider.groq) {
-      return provider.models.first;
-    }
+    final key = switch (provider) {
+      TranscriptionProvider.groq => _groqModelKey,
+      TranscriptionProvider.localWhisper => _whisperModelKey,
+      _ => null,
+    };
+    if (key == null) return provider.models.first;
 
-    final saved = await _storage.read(key: _groqModelKey);
+    final saved = await _storage.read(key: key);
     if (saved != null && provider.models.contains(saved)) {
       return saved;
     }
@@ -318,6 +321,8 @@ class SettingsService {
 
     if (provider == TranscriptionProvider.groq) {
       await _storage.write(key: _groqModelKey, value: model);
+    } else if (provider == TranscriptionProvider.localWhisper) {
+      await _storage.write(key: _whisperModelKey, value: model);
     }
   }
 }

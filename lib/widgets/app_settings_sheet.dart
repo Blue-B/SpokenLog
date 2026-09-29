@@ -10,6 +10,7 @@ class AppSettingsSheet extends StatelessWidget {
     required this.onDisplayLanguage,
     this.useEnglish = false,
     this.onStorage,
+    this.onLicenses,
   });
 
   final VoidCallback onGroq;
@@ -19,6 +20,7 @@ class AppSettingsSheet extends StatelessWidget {
   final VoidCallback onDisplayLanguage;
   final bool useEnglish;
   final VoidCallback? onStorage;
+  final VoidCallback? onLicenses;
 
   String _t(String ko, String en) => useEnglish ? en : ko;
 
@@ -93,6 +95,14 @@ class AppSettingsSheet extends StatelessWidget {
                 entry('settings-cloudflare', Icons.cloud_outlined, 'Cloudflare',
                     _t('Account ID와 API Token', 'Account ID and API token'),
                     onCloudflare),
+                if (onLicenses != null) ...[
+                  heading(_t('정보', 'About')),
+                  entry('settings-licenses', Icons.description_outlined,
+                      _t('오픈소스 라이선스', 'Open-source licenses'),
+                      _t('앱과 음성 모델의 라이선스 및 출처',
+                          'Licenses and sources of the app and speech models'),
+                      onLicenses!),
+                ],
                 const SizedBox(height: 24),
               ],
             ),

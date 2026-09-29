@@ -16,8 +16,6 @@ import '../models/transcription_language.dart';
 import '../models/transcription_provider.dart';
 import '../services/cloudflare_transcription_service.dart';
 import '../services/groq_transcription_service.dart';
-import '../services/moonshine_model_manager.dart';
-import '../services/moonshine_transcription_service.dart';
 import '../services/sensevoice_model_manager.dart';
 import '../services/sensevoice_transcription_service.dart';
 import '../services/speaker_diarization_model_manager.dart';
@@ -60,14 +58,12 @@ class _HomeScreenState extends State<HomeScreen> {
   final _groq = GroqTranscriptionService();
   final _cloudflare = CloudflareTranscriptionService();
   final _senseVoiceModelManager = SenseVoiceModelManager();
-  final _moonshineModelManager = MoonshineModelManager();
   final _whisperModelManager = WhisperModelManager();
   final _speakerDiarizationModelManager =
       SpeakerDiarizationModelManager();
   late final _waveformService = widget.waveformService ?? WavWaveformService();
   final Map<String, Future<List<double>>> _waveformFutures = {};
   late final SenseVoiceTranscriptionService _senseVoice;
-  late final MoonshineTranscriptionService _moonshine;
   late final WhisperTranscriptionService _whisper;
   late final SpeakerDiarizationService _speakerDiarization;
   late final _player = widget.audioPlayer ?? AudioPlayer();
@@ -134,7 +130,6 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _senseVoice = SenseVoiceTranscriptionService(_senseVoiceModelManager);
-    _moonshine = MoonshineTranscriptionService(_moonshineModelManager);
     _whisper = WhisperTranscriptionService(_whisperModelManager);
     _speakerDiarization =
         SpeakerDiarizationService(_speakerDiarizationModelManager);
@@ -146,7 +141,15 @@ class _HomeScreenState extends State<HomeScreen> {
     unawaited(_loadUiPreferences());
   }
 
+  /// Keeps the Whisper model manager on the size saved in settings.
+  Future<void> _syncWhisperSize() async {
+    _whisperModelManager.size = WhisperModelSize.fromModelId(
+      await _settings.getModel(TranscriptionProvider.localWhisper),
+    );
+  }
+
   Future<void> _loadTranscriptionPreference() async {
+    await _syncWhisperSize();
     final provider = await _settings.getProvider();
     final language = await _settings.getTranscriptionLanguage();
     final model = await _settings.getModel(provider);
@@ -631,32 +634,8 @@ class _HomeScreenState extends State<HomeScreen> {
     bool announceCompletion = true,
   }) async {
     final provider = providerOverride ?? await _settings.getProvider();
-    var language = await _settings.getTranscriptionLanguage();
+    final language = await _settings.getTranscriptionLanguage();
     if (!mounted) return;
-    if (provider.needsKoreanConfirmation(language)) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (dialogContext) => AlertDialog(
-          title: Text(_t('한국어로 전사할까요?', 'Transcribe as Korean?')),
-          content: Text(_t(
-            'Moonshine KO는 한국어 전용이며 언어를 자동으로 판별하지 않습니다. '
-            '이 녹음이 한국어라면 그대로 전사할 수 있습니다. '
-            '여러 언어를 자동 감지하려면 SenseVoice나 Whisper를 선택해 주세요.',
-            'Moonshine KO recognizes Korean only; it does not detect the language. '
-            'Continue for a Korean recording, or use SenseVoice or Whisper for automatic language detection.',
-          )),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext, false),
-                child: Text(_t('취소', 'Cancel'))),
-            FilledButton(onPressed: () => Navigator.pop(dialogContext, true),
-                child: Text(_t('한국어로 전사', 'Transcribe as Korean'))),
-          ],
-        ),
-      );
-      if (confirmed != true || !mounted) return;
-      // This applies only to this request; keep the saved auto preference.
-      language = provider.effectiveLanguage(language, koreanConfirmed: true)!;
-    }
     final model = await _settings.getModel(provider);
 
     if (!provider.supportsLanguage(language)) {
@@ -735,11 +714,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         TranscriptionProvider.localSenseVoice =>
           await _senseVoice.transcribeRecording(
-            recording: item,
-            language: language,
-          ),
-        TranscriptionProvider.localMoonshine =>
-          await _moonshine.transcribeRecording(
             recording: item,
             language: language,
           ),
@@ -870,7 +844,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }) async {
     final language = await _settings.getTranscriptionLanguage();
     final senseVoiceReady = await _senseVoiceModelManager.isInstalled();
-    final moonshineReady = await _moonshineModelManager.isInstalled();
     final whisperReady = await _whisperModelManager.isInstalled();
     final cloudflareReady =
         await _settings.hasApiKey(TranscriptionProvider.cloudflare) &&
@@ -965,17 +938,6 @@ class _HomeScreenState extends State<HomeScreen> {
               child: const Text('SenseVoice'),
             ),
           if (usable(
-            TranscriptionProvider.localMoonshine,
-            moonshineReady,
-          ))
-            OutlinedButton(
-              onPressed: () => Navigator.pop(
-                context,
-                TranscriptionProvider.localMoonshine,
-              ),
-              child: const Text('Moonshine'),
-            ),
-          if (usable(
             TranscriptionProvider.localWhisper,
             whisperReady,
           ))
@@ -996,6 +958,11 @@ class _HomeScreenState extends State<HomeScreen> {
     var provider = await _settings.getProvider();
     var language = await _settings.getTranscriptionLanguage();
     var model = await _settings.getModel(provider);
+    // Switching engines must keep each engine's saved model, not reset it.
+    final savedModels = {
+      for (final value in TranscriptionProvider.values)
+        value: await _settings.getModel(value),
+    };
     if (!mounted) return;
 
     await showModalBottomSheet<void>(
@@ -1056,7 +1023,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     setSheetState(() {
                       provider = next;
                       language = _compatibleLanguage(provider, language);
-                      model = provider.models.first;
+                      model = savedModels[provider]!;
                     });
                   },
                 ),
@@ -1120,6 +1087,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         await _settings.setProvider(provider);
                         await _settings.setTranscriptionLanguage(language);
                         await _settings.setModel(provider, model);
+                        await _syncWhisperSize();
                         if (!mounted) return;
                         setState(() {
                           _provider = provider;
@@ -1144,8 +1112,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final installed = <TranscriptionProvider, bool>{
       TranscriptionProvider.localSenseVoice:
           await _senseVoiceModelManager.isInstalled(),
-      TranscriptionProvider.localMoonshine:
-          await _moonshineModelManager.isInstalled(),
       TranscriptionProvider.localWhisper:
           await _whisperModelManager.isInstalled(),
       TranscriptionProvider.groq:
@@ -1300,6 +1266,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 onTranscription: () => unawaited(_openSettings()),
                 onDisplayLanguage: () => unawaited(_showLanguageSettings()),
                 onStorage: () => unawaited(_showStorageManagement()),
+                onLicenses: () => showLicensePage(
+                  context: context,
+                  applicationName: 'SpokenLog',
+                  applicationLegalese:
+                      'AGPL-3.0-only. Speech models are downloaded separately; '
+                      'their licenses are listed below.',
+                ),
               ),
             ),
           ),
@@ -1444,9 +1417,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     var senseVoiceInstalled =
         await _senseVoiceModelManager.isInstalled();
-    var moonshineInstalled =
-        await _moonshineModelManager.isInstalled();
+    await _syncWhisperSize();
     var whisperInstalled = await _whisperModelManager.isInstalled();
+    var whisperModelValue = _whisperModelManager.size.modelId;
     var diarizationInstalled =
         await _speakerDiarizationModelManager.isInstalled();
 
@@ -1470,9 +1443,7 @@ class _HomeScreenState extends State<HomeScreen> {
     String? settingsNotice;
     bool settingsNoticeIsError = false;
 
-    if (!provider.supportsLanguage(language) &&
-        !(provider == TranscriptionProvider.localMoonshine &&
-            language == TranscriptionLanguage.auto)) {
+    if (!provider.supportsLanguage(language)) {
       // Opening a model's settings must not silently jump to a cloud provider.
       language = _compatibleLanguage(provider, language);
     }
@@ -1482,7 +1453,6 @@ class _HomeScreenState extends State<HomeScreen> {
       TranscriptionProvider.cloudflare:
           cloudflareToken.trim().isNotEmpty,
       TranscriptionProvider.localSenseVoice: false,
-      TranscriptionProvider.localMoonshine: false,
       TranscriptionProvider.localWhisper: false,
     };
 
@@ -1556,15 +1526,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                   if (!dialogContext.mounted) return;
                   setLocalState(() => senseVoiceInstalled = true);
-                case TranscriptionProvider.localMoonshine:
-                  await _moonshineModelManager.download(
-                    onProgress: (progress, _) {
-                      if (!dialogContext.mounted) return;
-                      setLocalState(() => modelProgress = progress);
-                    },
-                  );
-                  if (!dialogContext.mounted) return;
-                  setLocalState(() => moonshineInstalled = true);
                 case TranscriptionProvider.localWhisper:
                   await _whisperModelManager.download(
                     onProgress: (progress, _) {
@@ -1603,10 +1564,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 await _senseVoiceModelManager.deleteModel();
                 if (!dialogContext.mounted) return;
                 setLocalState(() => senseVoiceInstalled = false);
-              case TranscriptionProvider.localMoonshine:
-                await _moonshineModelManager.deleteModel();
-                if (!dialogContext.mounted) return;
-                setLocalState(() => moonshineInstalled = false);
               case TranscriptionProvider.localWhisper:
                 await _whisperModelManager.deleteModel();
                 if (!dialogContext.mounted) return;
@@ -1661,7 +1618,6 @@ class _HomeScreenState extends State<HomeScreen> {
           bool localInstalled(TranscriptionProvider value) {
             return switch (value) {
               TranscriptionProvider.localSenseVoice => senseVoiceInstalled,
-              TranscriptionProvider.localMoonshine => moonshineInstalled,
               TranscriptionProvider.localWhisper => whisperInstalled,
               _ => false,
             };
@@ -1848,11 +1804,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           Widget providerCard(TranscriptionProvider value) {
             final selected = value == provider;
-            final needsKoreanConfirmation =
-                value == TranscriptionProvider.localMoonshine &&
-                language == TranscriptionLanguage.auto;
-            final supported = value.supportsLanguage(language) ||
-                needsKoreanConfirmation;
+            final supported = value.supportsLanguage(language);
             final installed =
                 value.isLocal ? localInstalled(value) : null;
 
@@ -1898,8 +1850,9 @@ class _HomeScreenState extends State<HomeScreen> {
             final installed = localInstalled(provider);
             final sizeLabel = switch (provider) {
               TranscriptionProvider.localSenseVoice => _t('약 239MB', 'about 239 MB'),
-              TranscriptionProvider.localMoonshine => _t('약 69MB', 'about 69 MB'),
-              TranscriptionProvider.localWhisper => _t('약 104MB', 'about 104 MB'),
+              TranscriptionProvider.localWhisper => _t(
+                    '약 ${_whisperModelManager.size.downloadMegabytes}MB',
+                    'about ${_whisperModelManager.size.downloadMegabytes} MB'),
               _ => '',
             };
             final downloading = downloadingTask == provider.id;
@@ -2009,9 +1962,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Text(
                     _t('선택한 STT 엔진과 독립적으로 동작하는 별도 로컬 후처리입니다. '
                     'Groq, Cloudflare, SenseVoice, Local Whisper처럼 시간 구간이 있는 결과에 공통 적용되며 '
-                    '음성은 화자 구분을 위해 외부 서버로 전송되지 않습니다. '
-                    'Moonshine은 현재 시간 구간을 제공하지 않아 화자 라벨이 생략됩니다.',
-                    'Runs locally after transcription, with no audio upload. Works with timestamped results from Groq, Cloudflare, SenseVoice and Local Whisper. Moonshine has no detailed timestamps, so speaker labels are skipped.'),
+                    '음성은 화자 구분을 위해 외부 서버로 전송되지 않습니다.',
+                    'Runs locally after transcription, with no audio upload. Works with timestamped results from Groq, Cloudflare, SenseVoice and Local Whisper.'),
                     style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                           color: scheme.onSurfaceVariant,
                         ),
@@ -2192,9 +2144,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               if (value == null) return;
                               setLocalState(() {
                                 language = value;
-                                if (!provider.supportsLanguage(language) &&
-                                    !(provider == TranscriptionProvider.localMoonshine &&
-                                      language == TranscriptionLanguage.auto)) {
+                                if (!provider.supportsLanguage(language)) {
                                   final candidates = TranscriptionProvider.values
                                       .where(
                                         (candidate) =>
@@ -2218,13 +2168,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 7),
                     Text(
-                      provider == TranscriptionProvider.localMoonshine
-                          ? _t('Moonshine KO는 한국어 전용입니다. 자동 감지로 설정해도 '
-                              '실행 전에 한국어로 전사할지 확인하며, 다른 언어를 자동 판별하지 않습니다.',
-                              'Moonshine KO is Korean-only. With Auto selected, you must confirm Korean before transcription; other languages are not detected.')
-                          : _t('자동 감지는 선택한 모델이 지원하는 언어 안에서 동작합니다. '
-                              '언어를 알고 있다면 직접 선택할 수 있습니다.',
-                              'Auto detection works within the selected model’s supported languages. You can also choose the spoken language explicitly.'),
+                      _t('자동 감지는 선택한 모델이 지원하는 언어 안에서 동작합니다. '
+                          '언어를 알고 있다면 직접 선택할 수 있습니다.',
+                          'Auto detection works within the selected model’s supported languages. You can also choose the spoken language explicitly.'),
                       style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -2407,6 +2353,44 @@ class _HomeScreenState extends State<HomeScreen> {
                               },
                       ),
                     ],
+                    if (provider == TranscriptionProvider.localWhisper) ...[
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                        initialValue: whisperModelValue,
+                        isExpanded: true,
+                        decoration: InputDecoration(
+                          labelText: _t('Whisper 크기', 'Whisper size'),
+                          prefixIcon: const Icon(Icons.tune_rounded),
+                        ),
+                        items: TranscriptionProvider.localWhisper.models
+                            .map(
+                              (value) => DropdownMenuItem(
+                                value: value,
+                                child: Text(
+                                  TranscriptionProvider.localWhisper
+                                      .modelLabel(value, useEnglish: _useEnglish),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: isDownloading
+                            ? null
+                            : (value) async {
+                                if (value == null) return;
+                                _whisperModelManager.size =
+                                    WhisperModelSize.fromModelId(value);
+                                final installed =
+                                    await _whisperModelManager.isInstalled();
+                                if (!dialogContext.mounted) return;
+                                setLocalState(() {
+                                  whisperModelValue = value;
+                                  whisperInstalled = installed;
+                                });
+                              },
+                      ),
+                    ],
                     if (provider.isLocal) ...[
                       const SizedBox(height: 10),
                       localModelPanel(),
@@ -2450,6 +2434,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     settingsScrollController.dispose();
+    // A cancelled dialog may have switched the manager to another size.
+    await _syncWhisperSize();
 
     if (saved == true) {
       await _settings.setProvider(provider);
@@ -2463,6 +2449,8 @@ class _HomeScreenState extends State<HomeScreen> {
         if (key.isNotEmpty) {
           await _settings.setApiKey(provider, key);
         }
+      } else if (provider == TranscriptionProvider.localWhisper) {
+        await _settings.setModel(provider, whisperModelValue);
       } else if (provider == TranscriptionProvider.cloudflare) {
         await _settings.setCloudflareAccountId(
           cloudflareAccountController.text,
@@ -2473,9 +2461,11 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
 
-      final selectedModel = provider == TranscriptionProvider.groq
-          ? groqModelValue
-          : provider.models.first;
+      final selectedModel = switch (provider) {
+        TranscriptionProvider.groq => groqModelValue,
+        TranscriptionProvider.localWhisper => whisperModelValue,
+        _ => provider.models.first,
+      };
 
       if (mounted) {
         _refreshRecordingViews(() {
@@ -6022,7 +6012,6 @@ class _SttProviderCard extends StatelessWidget {
         TranscriptionProvider.groq => Icons.bolt_rounded,
         TranscriptionProvider.cloudflare => Icons.cloud_outlined,
         TranscriptionProvider.localSenseVoice => Icons.speed_rounded,
-        TranscriptionProvider.localMoonshine => Icons.memory_rounded,
         TranscriptionProvider.localWhisper => Icons.language_rounded,
       };
 

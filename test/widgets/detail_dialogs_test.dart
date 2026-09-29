@@ -270,6 +270,7 @@ void main() {
           'models': 0,
           'transcription': 0,
           'language': 0,
+          'licenses': 0,
         };
 
     testWidgets('every entry invokes its callback', (tester) async {
@@ -283,6 +284,7 @@ void main() {
           onTranscription: () =>
               counts['transcription'] = counts['transcription']! + 1,
           onDisplayLanguage: () => counts['language'] = counts['language']! + 1,
+          onLicenses: () => counts['licenses'] = counts['licenses']! + 1,
         ),
       );
 
@@ -292,6 +294,7 @@ void main() {
         'settings-local-models': 'models',
         'settings-transcription': 'transcription',
         'settings-display-language': 'language',
+        'settings-licenses': 'licenses',
       }.entries) {
         await tester.tap(find.byKey(ValueKey(entry.key)));
         await tester.pump();

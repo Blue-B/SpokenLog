@@ -18,7 +18,7 @@ Back up important recordings before updating. [Installation guide](docs/installa
 ## Features
 
 - Recording library with search, collections, favorites and timestamped playback.
-- Local SenseVoice, Moonshine or Whisper; cloud transcription with your own Groq or Cloudflare credentials.
+- Local SenseVoice or Whisper (Tiny, Base or Small); cloud transcription with your own Groq or Cloudflare credentials.
 - Transcript editing, local speaker labels, and TXT, SRT, VTT or JSON export.
 
 Local transcription keeps audio on your device and currently requires WAV. Cloud transcription uploads audio to the selected provider. The interface supports English and Korean; spoken-language support depends on the engine.

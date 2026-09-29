@@ -5,12 +5,14 @@ import 'package:path_provider/path_provider.dart';
 import 'screens/home_screen.dart';
 import 'services/background_recording_service.dart';
 import 'services/settings_service.dart';
+import 'widgets/model_licenses.dart';
 import 'widgets/storage_management_dialog.dart';
 
 RandomAccessFile? _desktopLock;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerModelLicenses();
   final uninstall = Platform.environment['SPOKENLOG_UNINSTALL'] == '1';
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
     try {

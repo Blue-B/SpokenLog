@@ -171,7 +171,7 @@ void main() {
         () => ensureDecodedWaveUsable(
           sampleCount: 0,
           sampleRate: 0,
-          provider: 'Local Moonshine',
+          provider: 'Local Whisper',
         ),
         throwsA(isA<Exception>()),
       );
@@ -182,7 +182,7 @@ void main() {
         () => ensureDecodedWaveUsable(
           sampleCount: 100,
           sampleRate: 0,
-          provider: 'Local Moonshine',
+          provider: 'Local Whisper',
         ),
         throwsA(isA<Exception>()),
       );
@@ -193,7 +193,7 @@ void main() {
         () => ensureDecodedWaveUsable(
           sampleCount: 16000,
           sampleRate: 16000,
-          provider: 'Local Moonshine',
+          provider: 'Local Whisper',
         ),
         returnsNormally,
       );

@@ -481,6 +481,7 @@ void main() {
   });
 
   for (final provider in [TranscriptionProvider.localSenseVoice,
+      TranscriptionProvider.localWhisper,
       TranscriptionProvider.groq, TranscriptionProvider.cloudflare]) {
   testWidgets('English $provider settings localize modes, models and actions', (tester) async {
     const channel = MethodChannel('plugins.flutter.io/path_provider');
@@ -517,6 +518,48 @@ void main() {
   });
 
   }
+
+  testWidgets('Whisper size can be chosen and the download size follows it', (tester) async {
+    const channel = MethodChannel('plugins.flutter.io/path_provider');
+    final messenger = tester.binding.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(channel, (_) async => tempDir.path);
+    addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester,
+        recording: FakeRecordingService([]),
+        settings: FakeSettingsService(appLanguage: 'en',
+            provider: TranscriptionProvider.localWhisper),
+        player: player);
+    await tester.tap(find.byTooltip('Settings').first);
+    await tester.pumpAndSettle();
+    final entry = find.byKey(const ValueKey('settings-transcription'));
+    await tester.ensureVisible(entry);
+    await tester.runAsync(() async {
+      await tester.tap(entry);
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    });
+    await tester.pumpAndSettle();
+
+    expect(find.text('Whisper size'), findsOneWidget);
+    expect(find.text('Download Whisper · about 104 MB'), findsOneWidget);
+
+    final sizeField = find.byType(DropdownButtonFormField<String>);
+    await tester.ensureVisible(sizeField);
+    await tester.pumpAndSettle();
+    await tester.tap(sizeField);
+    await tester.pumpAndSettle();
+    await tester.tap(find.textContaining('Whisper Base INT8').last);
+    await tester.pumpAndSettle();
+    // The size change checks the model files, which is real disk I/O.
+    await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 150)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Download Whisper · about 161 MB'), findsOneWidget);
+    expect(find.text('Download Whisper · about 104 MB'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('English transcript and active playback labels stay English', (tester) async {
     final player = FakeAudioPlayer();

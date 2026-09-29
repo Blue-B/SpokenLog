@@ -7,9 +7,12 @@ import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
 import '../models/transcription_language.dart';
 import '../models/transcription_result.dart';
+import 'local_audio_windows.dart';
 import 'local_wav_input.dart';
 import 'sensevoice_model_manager.dart';
 import 'sherpa_runtime.dart';
+
+const double _senseVoiceWindowSeconds = 30;
 
 class SenseVoiceTranscriptionService {
   SenseVoiceTranscriptionService(this._modelManager);
@@ -182,33 +185,53 @@ List<Map<String, dynamic>> _decodeSenseVoiceBatch(
       final durationSeconds = wave.sampleRate > 0
           ? wave.samples.length / wave.sampleRate
           : 0.0;
-      final stream = recognizer.createStream();
 
-      try {
-        stream.acceptWaveform(
-          samples: wave.samples,
-          sampleRate: wave.sampleRate,
-        );
-        recognizer.decode(stream);
-        final result = recognizer.getResult(stream);
+      // SenseVoice is trained on short clips, so long recordings are decoded
+      // in windows cut at quiet points and the times shifted back.
+      final texts = <String>[];
+      final segments = <Map<String, dynamic>>[];
+      for (final window in planAudioWindows(
+        wave.samples,
+        wave.sampleRate,
+        maxSeconds: _senseVoiceWindowSeconds,
+      )) {
+        final samples = wave.samples.sublist(window.start, window.end);
+        final offset = window.start / wave.sampleRate;
+        final stream = recognizer.createStream();
 
-        final text = _cleanSenseVoiceText(result.text);
-        final tokens = List<String>.from(result.tokens);
-        final timestamps =
-            result.timestamps.map((value) => value.toDouble()).toList();
+        try {
+          stream.acceptWaveform(
+            samples: samples,
+            sampleRate: wave.sampleRate,
+          );
+          recognizer.decode(stream);
+          final result = recognizer.getResult(stream);
 
-        outputs.add({
-          'text': text,
-          'duration': durationSeconds,
-          'segments': _buildTimestampSegments(
-            tokens: tokens,
-            timestamps: timestamps,
-            durationSeconds: durationSeconds,
-          ),
-        });
-      } finally {
-        stream.free();
+          texts.add(_cleanSenseVoiceText(result.text));
+          segments.addAll(
+            _buildTimestampSegments(
+              tokens: List<String>.from(result.tokens),
+              timestamps:
+                  result.timestamps.map((value) => value.toDouble()).toList(),
+              durationSeconds: samples.length / wave.sampleRate,
+            ).map(
+              (segment) => {
+                ...segment,
+                'start': (segment['start'] as double) + offset,
+                'end': (segment['end'] as double) + offset,
+              },
+            ),
+          );
+        } finally {
+          stream.free();
+        }
       }
+
+      outputs.add({
+        'text': joinTranscriptPieces(texts),
+        'duration': durationSeconds,
+        'segments': segments,
+      });
     }
   } finally {
     recognizer.free();
