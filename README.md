@@ -13,7 +13,7 @@ https://github.com/user-attachments/assets/cf12c70e-a913-4209-887f-9ed36139ffa6
 | macOS 12+ | [ZIP](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-macOS.zip) | Not notarized |
 | iOS / iPadOS 15+ | [Unsigned IPA](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SpokenLog-iOS-unsigned.ipa) | Re-signing required; not tap-to-install |
 
-Back up important recordings before updating. [Installation guide](docs/installation.md) | [Checksums](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SHA256SUMS.txt)
+Current packages: **0.1.0, build 9**. Back up important recordings before updating. [Installation guide](docs/installation.md) | [Checksums](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.0/SHA256SUMS.txt) | [Tested behavior and limits](docs/releases/v0.1.0-build9-details.md)
 
 ## Features
 

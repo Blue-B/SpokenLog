@@ -6,11 +6,11 @@ Download a package from the [latest release](https://github.com/Blue-B/SpokenLog
 
 ## Known issues
 
-Build 8 fixes the Windows build 7 SenseVoice crash caused by loading an incompatible system ONNX Runtime. It opens the bundled runtime first. Real transcription of a synthetic WAV passed with the new Windows release DLLs. Other engines and platforms have not received equivalent inference testing.
+Build 9 fixes local Whisper's 30-second truncation and adds Tiny, Base and Small selection. Long WAV files are transcribed in pieces. Whisper subtitle times are approximate, not word-accurate, and may need manual editing. Moonshine is no longer selectable; existing downloaded files are not deleted.
 
-Build 8 includes the demo's single Settings entry and translations for the settings, transcript and playback messages checked during testing. Some errors and less-used paths can still show Korean in English mode. Japanese is a transcription language, not an interface language.
+Synthetic-speech transcription passed with the final Windows release DLLs, the Android emulator release app, the macOS release app and an iPhone simulator build. These checks do not establish real-device microphone, background or interruption behavior. Some imported WAV details remained at “Checking duration” / `--:--` even though transcription succeeded. Some English-mode messages still appear in Korean.
 
-See the [build details](releases/v0.1.0-build8-details.md) for current package checks, earlier runtime tests and their limits.
+See the [build details](releases/v0.1.0-build9-details.md) for the exact test scope, recording limits and remaining license-review gaps.
 
 ## Choose a package
 
@@ -35,7 +35,7 @@ The Android APK currently uses a development signing key. Much older APKs signed
 
 The app is ad-hoc signed, not Apple-notarized. This manual installation route does not require a paid Apple developer account or weekly signing renewal. Do not disable Gatekeeper system-wide or bypass a malware warning. See [Apple's instructions](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
 
-The earlier build 7 ZIP was tested on a remote Mac for file import and restart. Build 8 passed package, signature and entitlement checks, but Mac GUI tests were not repeated. The full download-and-approval flow on an ordinary user's Mac remains unverified.
+Build 9 was tested on a remote M2 Mac for app launch, Base selection and saving, native WAV import and 20-segment transcription. The CI machine needed an isolated, normally unlocked test Keychain. The full download-and-approval flow on an ordinary user's Mac remains unverified.
 
 ## iPhone and iPad installation
 

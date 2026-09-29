@@ -15,6 +15,8 @@ Record audio directly or import an existing file. Recordings and transcripts sta
 
 Active recordings periodically checkpoint metadata. Interrupted WAV sessions are recovered on the next launch when possible; this is not a substitute for backups.
 
+There is no app-imposed recording timer, but recording is not unlimited. At 16 kHz mono 16-bit PCM, audio uses about 115 MB per hour. Conventional WAV's roughly 4 GB size limit corresponds to about 37 hours per file; this is a format ceiling, not a tested recording guarantee. Free space, battery, OS interruptions and memory can limit usable duration much earlier. Local transcription still loads the whole WAV into memory. A near-one-hour synthetic file was transcribed successfully, but continuous microphone recording for that duration was not tested.
+
 ## Imported files
 
 | Format | Local transcription | Cloud transcription |
@@ -31,7 +33,7 @@ Imported files are copied into the library. The original file is not modified or
 | Engine | Where it runs | Notes |
 | --- | --- | --- |
 | SenseVoiceSmall INT8 | On your device | Korean, English, Chinese, Japanese and Cantonese; includes timestamps. About 239 MB. See the [Windows fix and testing limits](installation.md#known-issues). |
-| Whisper Multilingual INT8 (Tiny, Base or Small) | On your device | 99 languages except Cantonese. Choose the size in settings: Tiny about 104 MB (fastest), Base about 161 MB, Small about 375 MB (most accurate). The published models give no word times, so subtitle lines come from pauses in the audio (see [Export formats](#export-formats)). |
+| Whisper Multilingual INT8 (Tiny, Base or Small) | On your device | 99 languages except Cantonese. Choose the size in settings: Tiny about 104 MB (fastest), Base about 161 MB, Small about 375 MB (larger model; accuracy still depends on the audio). The published models give no word times, so subtitle lines come from pauses in the audio (see [Export formats](#export-formats)). |
 | Groq | Cloud | Whisper Large V3 or Large V3 Turbo, using your own API key. |
 | Cloudflare Workers AI | Cloud | Whisper Large V3 Turbo, using your own credentials. |
 
@@ -83,7 +85,9 @@ Models are downloaded on request and are not bundled in the app.
 | Whisper (OpenAI) | MIT |
 | SenseVoiceSmall | FunASR Model Open Source License 1.1: use, copy, modify and share are allowed; the source and author must be credited and the model name kept |
 | pyannote segmentation 3.0 | MIT |
-| 3D-Speaker embedding | The 3D-Speaker project is Apache-2.0; the individual model card was not checked separately |
+| 3D-Speaker ERes2Net embedding | Apache-2.0 in the 3D-Speaker project and ModelScope model metadata |
+
+Whisper's MIT notice and the FunASR model license text are available in Settings → About → Open-source licenses. The app's AGPL-3.0-only license does not replace the model licenses. See the [build 9 license-review limits](releases/v0.1.0-build9-details.md#license-review) before treating this as clearance for commercial redistribution.
 
 Earlier builds also offered Moonshine Tiny KO. Moonshine's non-English models use a community license that is free for research, non-commercial use and organizations under US$1 million annual revenue, with a separate commercial license required above that, so it was removed to keep the app clear of those conditions.
 
