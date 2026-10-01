@@ -27,10 +27,10 @@ MACOS_ENTITLEMENTS = {
 
 
 def app_version() -> tuple[str, str]:
-    match = re.search(r"^version:\s*([\d.]+)\+(\d+)\s*$",
+    match = re.search(r"^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$",
                       (ROOT / "pubspec.yaml").read_text(), re.MULTILINE)
-    if match is None or match[1] != "0.1.0":
-        raise ValueError("This workflow only replaces the v0.1.0 release.")
+    if match is None:
+        raise ValueError("Expected major.minor.patch+build in pubspec.yaml.")
     return match[1], match[2]
 
 

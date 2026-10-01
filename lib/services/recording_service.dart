@@ -8,6 +8,7 @@ import 'package:record/record.dart';
 import '../models/recording_collection.dart';
 import '../models/recording_item.dart';
 import '../models/transcription_result.dart';
+import '../utils/atomic_file.dart';
 import '../utils/wav_duration.dart';
 import 'background_recording_service.dart';
 import 'local_wav_input.dart';
@@ -41,6 +42,7 @@ class RecordingService {
   bool _paused = false;
   String? _activeTitle;
   Timer? _checkpointTimer;
+  Future<void> _activeMetadataWrites = Future<void>.value();
 
   Future<Directory> _recordingsDirectory() async {
     final root = await getApplicationDocumentsDirectory();
@@ -84,9 +86,9 @@ class RecordingService {
     List<RecordingCollection> collections,
   ) async {
     final file = await _collectionsFile();
-    await file.writeAsString(
+    await writeStringAtomically(
+      file,
       jsonEncode(collections.map((value) => value.toJson()).toList()),
-      flush: true,
     );
   }
 
@@ -231,7 +233,10 @@ class RecordingService {
     _checkpointTimer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (_activeSessionDir == null || _stopRequested) return;
       unawaited(
-        _writeActiveMetadata(state: _paused ? 'paused' : 'recording'),
+        _writeActiveMetadata(state: _paused ? 'paused' : 'recording')
+            .catchError((Object error) {
+          stderr.writeln('SpokenLog: recording checkpoint could not be saved.');
+        }),
       );
     });
   }
@@ -321,11 +326,13 @@ class RecordingService {
 
   bool get isPaused => _paused;
 
-  Future<void> _writeActiveMetadata({required String state}) async {
+  Future<void> _writeActiveMetadata({required String state}) {
     final dir = _activeSessionDir;
     final startedAt = _activeSessionStartedAt;
     final audioPath = _activeAudioPath;
-    if (dir == null || startedAt == null || audioPath == null) return;
+    if (dir == null || startedAt == null || audioPath == null) {
+      return Future<void>.value();
+    }
 
     final fileName = File(audioPath).uri.pathSegments.last;
     final payload = <String, dynamic>{
@@ -348,8 +355,14 @@ class RecordingService {
       ],
     };
 
-    await File('${dir.path}${Platform.pathSeparator}session.json')
-        .writeAsString(jsonEncode(payload), flush: true);
+    final file = File('${dir.path}${Platform.pathSeparator}session.json');
+    final contents = jsonEncode(payload);
+    final write = _activeMetadataWrites
+        .then((_) => writeStringAtomically(file, contents));
+    // Keep later checkpoints/stop usable after a failed write; its caller still
+    // receives the failure. In-flight checkpoints cannot overwrite stop state.
+    _activeMetadataWrites = write.then<void>((_) {}, onError: (Object error) {});
+    return write;
   }
 
   Future<List<RecordingItem>> loadRecordings() async {
@@ -447,14 +460,15 @@ class RecordingService {
         )
         .toList();
 
-    final transcriptFile =
-        File('${dir.path}${Platform.pathSeparator}transcript.txt');
-    final transcript = await transcriptFile.exists()
-        ? await transcriptFile.readAsString()
-        : null;
     final transcription = await _readTranscriptionResult(
       File('${dir.path}${Platform.pathSeparator}transcript.json'),
     );
+    final transcriptFile =
+        File('${dir.path}${Platform.pathSeparator}transcript.txt');
+    final transcript = transcription?.text ??
+        (await transcriptFile.exists()
+            ? await transcriptFile.readAsString()
+            : null);
     final segments = transcription?.segments ?? const <TranscriptSegment>[];
     final speakerLabels =
         transcription?.speakerLabels ?? const <int, String>{};
@@ -476,13 +490,14 @@ class RecordingService {
 
   Future<RecordingItem> _loadLegacyRecording(File file) async {
     final stat = await file.stat();
-    final transcriptFile = File('${file.path}.txt');
-    final transcript = await transcriptFile.exists()
-        ? await transcriptFile.readAsString()
-        : null;
     final transcription = await _readTranscriptionResult(
       File('${file.path}.transcript.json'),
     );
+    final transcriptFile = File('${file.path}.txt');
+    final transcript = transcription?.text ??
+        (await transcriptFile.exists()
+            ? await transcriptFile.readAsString()
+            : null);
     final segments = transcription?.segments ?? const <TranscriptSegment>[];
     final speakerLabels =
         transcription?.speakerLabels ?? const <int, String>{};
@@ -508,7 +523,7 @@ class RecordingService {
     if (!await file.exists()) return null;
     try {
       final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! Map) return null;
+      if (decoded is! Map || decoded['text'] is! String) return null;
       return TranscriptionResult.fromJson(
         Map<String, dynamic>.from(decoded),
       );
@@ -549,7 +564,7 @@ class RecordingService {
           ..addAll(chunk);
       }
     }
-    await metadataFile.writeAsString(jsonEncode(metadata), flush: true);
+    await writeStringAtomically(metadataFile, jsonEncode(metadata));
   }
 
   Future<RecordingItem> importAudioFile(String sourcePath) async {
@@ -605,9 +620,10 @@ class RecordingService {
         ],
       };
 
-      await File(
-        '${sessionDir.path}${Platform.pathSeparator}session.json',
-      ).writeAsString(jsonEncode(metadata), flush: true);
+      await writeStringAtomically(
+        File('${sessionDir.path}${Platform.pathSeparator}session.json'),
+        jsonEncode(metadata),
+      );
 
       return RecordingItem(
         id: sessionId,
@@ -636,9 +652,17 @@ class RecordingService {
     final stored = result.speakerLabels.isEmpty && item.speakerLabels.isNotEmpty
         ? result.withSpeakerLabels(item.speakerLabels)
         : result;
-    await File(item.transcriptPath).writeAsString(stored.text, flush: true);
-    await File(item.transcriptJsonPath)
-        .writeAsString(jsonEncode(stored.toJson()), flush: true);
+    // JSON commits the text, segments and labels as one snapshot. TXT is only
+    // a compatibility copy; failure there must not discard a committed edit.
+    await writeStringAtomically(
+      File(item.transcriptJsonPath),
+      jsonEncode(stored.toJson()),
+    );
+    try {
+      await writeStringAtomically(File(item.transcriptPath), stored.text);
+    } on FileSystemException {
+      stderr.writeln('SpokenLog: transcript saved; TXT copy could not be updated.');
+    }
   }
 
   Future<void> updateTranscript(
@@ -691,8 +715,7 @@ class RecordingService {
     RecordingItem item,
     Map<String, dynamic> metadata,
   ) {
-    return File(item.metadataPath)
-        .writeAsString(jsonEncode(metadata), flush: true);
+    return writeStringAtomically(File(item.metadataPath), jsonEncode(metadata));
   }
 
   Future<void> renameRecording(RecordingItem item, String title) async {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,6 +8,7 @@ import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
 import '../models/transcription_language.dart';
 import '../models/transcription_result.dart';
+import 'cloud_request.dart';
 import 'wav_upload_chunk_service.dart';
 
 class CloudflareTranscriptionService {
@@ -97,19 +99,18 @@ class CloudflareTranscriptionService {
 
     try {
       final bytes = await file.readAsBytes();
-      final response = await http.post(
-        uri,
-        headers: {
+      final request = http.Request('POST', uri)
+        ..headers.addAll({
           'Authorization': 'Bearer ${apiToken.trim()}',
           'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
+        })
+        ..body = jsonEncode({
           'audio': base64Encode(bytes),
           'task': 'transcribe',
           if (language.cloudCode != null) 'language': language.cloudCode,
           'vad_filter': true,
-        }),
-      );
+        });
+      final response = await sendCloudRequest(request);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw _errorFromResponse(response);
@@ -157,6 +158,12 @@ class CloudflareTranscriptionService {
       );
     } on TranscriptionException {
       rethrow;
+    } on TimeoutException {
+      throw const TranscriptionException(
+        kind: TranscriptionErrorKind.network,
+        provider: 'Cloudflare',
+        message: 'Cloudflare 응답 시간이 초과되었습니다. 연결을 확인하고 다시 시도해 주세요.',
+      );
     } on SocketException catch (e) {
       throw TranscriptionException(
         kind: TranscriptionErrorKind.network,

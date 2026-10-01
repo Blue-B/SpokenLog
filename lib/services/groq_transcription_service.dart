@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -7,6 +8,7 @@ import '../models/recording_item.dart';
 import '../models/transcription_error.dart';
 import '../models/transcription_language.dart';
 import '../models/transcription_result.dart';
+import 'cloud_request.dart';
 import 'wav_upload_chunk_service.dart';
 
 class GroqQuotaSnapshot {
@@ -138,8 +140,7 @@ class GroqTranscriptionService {
         request.fields['language'] = languageCode;
       }
 
-      final streamed = await request.send();
-      final response = await http.Response.fromStream(streamed);
+      final response = await sendCloudRequest(request);
       _captureQuota(response.headers);
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -168,6 +169,12 @@ class GroqTranscriptionService {
       return result;
     } on TranscriptionException {
       rethrow;
+    } on TimeoutException {
+      throw const TranscriptionException(
+        kind: TranscriptionErrorKind.network,
+        provider: 'Groq',
+        message: 'Groq 응답 시간이 초과되었습니다. 연결을 확인하고 다시 시도해 주세요.',
+      );
     } on SocketException catch (e) {
       throw TranscriptionException(
         kind: TranscriptionErrorKind.network,

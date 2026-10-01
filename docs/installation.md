@@ -2,7 +2,9 @@
 
 [Back to README](../README.md)
 
-Download a package from the [latest release](https://github.com/Blue-B/SpokenLog/releases/latest) and follow the instructions for your platform.
+Download [v0.1.2, build 10](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.2) using the links in the [README](../README.md), then follow the instructions for your platform. This version continues the build 9 source line and adds safer local saves and cloud-request time limits. Earlier release tags are retained for reference.
+
+Back up recordings before updating. These packages are not store-signed releases. The [release notes](releases/v0.1.2.md) distinguish source tests, package checks and real-device checks.
 
 ## Known issues
 
@@ -10,7 +12,7 @@ Build 9 fixes local Whisper's 30-second truncation and adds Tiny, Base and Small
 
 Synthetic-speech transcription passed with the final Windows release DLLs, the Android emulator release app, the macOS release app and an iPhone simulator build. These checks do not establish real-device microphone, background or interruption behavior. Some imported WAV details remained at “Checking duration” / `--:--` even though transcription succeeded. Some English-mode messages still appear in Korean.
 
-See the [build details](releases/v0.1.0-build9-details.md) for the exact test scope, recording limits and remaining license-review gaps.
+See the [0.1.2 release notes](releases/v0.1.2.md) for the current verification scope. The [historical build 9 details](releases/v0.1.0-build9-details.md) document earlier runtime checks, recording limits and remaining license-review gaps; they are not fresh execution checks of 0.1.2.
 
 ## Choose a package
 

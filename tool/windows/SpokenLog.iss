@@ -1,9 +1,12 @@
-; Compile with ISCC /DReleaseDir=... /DOutputDir=... /DBuildNumber=... SpokenLog.iss
+; Compile with ISCC /DReleaseDir=... /DOutputDir=... /DAppVersion=... /DBuildNumber=... SpokenLog.iss
 #ifndef ReleaseDir
   #error ReleaseDir is required
 #endif
 #ifndef OutputDir
   #error OutputDir is required
+#endif
+#ifndef AppVersion
+  #error AppVersion is required
 #endif
 #ifndef BuildNumber
   #error BuildNumber is required
@@ -11,9 +14,9 @@
 [Setup]
 AppId=io.github.blueb.spokenlog
 AppName=SpokenLog
-AppVersion=0.1.0
-AppVerName=SpokenLog 0.1.0 (build {#BuildNumber})
-VersionInfoVersion=0.1.0.{#BuildNumber}
+AppVersion={#AppVersion}
+AppVerName=SpokenLog {#AppVersion} (build {#BuildNumber})
+VersionInfoVersion={#AppVersion}.{#BuildNumber}
 DefaultDirName={localappdata}\Programs\SpokenLog
 DefaultGroupName=SpokenLog
 PrivilegesRequired=lowest

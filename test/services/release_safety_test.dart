@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:voice_transcriber/models/recording_item.dart';
 import 'package:voice_transcriber/models/transcription_language.dart';
+import 'package:voice_transcriber/models/transcription_result.dart';
 import 'package:voice_transcriber/services/cloudflare_transcription_service.dart';
 import 'package:voice_transcriber/services/local_wav_input.dart';
 import 'package:voice_transcriber/services/recording_service.dart';
@@ -286,6 +287,80 @@ void main() {
       throwsException,
     );
     expect(await root.list().where((e) => e is Directory).toList(), isEmpty);
+  });
+
+  for (final legacy in [false, true]) {
+    test('JSON keeps transcript and segments consistent (legacy=$legacy)', () async {
+      final directory = await Directory('${root.path}/recordings/session')
+          .create(recursive: true);
+      final audio = await File(legacy
+              ? '${root.path}/recordings/legacy.wav'
+              : '${directory.path}/recording.wav')
+          .writeAsBytes(wav());
+      if (legacy) await directory.delete();
+      final fixture = RecordingItem(
+        id: 'fixture',
+        createdAt: DateTime(2026),
+        chunks: [RecordingChunk(audioPath: audio.path, durationMs: 1000)],
+        storagePath: legacy ? audio.path : directory.path,
+        isLegacy: legacy,
+      );
+      const result = TranscriptionResult(
+        text: 'new transcript',
+        segments: [TranscriptSegment(
+          startSeconds: 0, endSeconds: 1, text: 'new transcript', speaker: 0,
+        )],
+        speakerLabels: {0: 'Speaker'},
+      );
+      await File(fixture.transcriptPath).writeAsString('stale text');
+      await File(fixture.transcriptJsonPath)
+          .writeAsString(jsonEncode(result.toJson()));
+      final loaded = (await service.loadRecordings()).single;
+      expect(loaded.transcript, result.text);
+      expect(loaded.segments.single.text, result.text);
+      expect(loaded.speakerLabels, result.speakerLabels);
+    });
+  }
+
+  test('failed JSON replacement preserves the previous text copy', () async {
+    final source = await File('${root.path}/source.wav').writeAsBytes(wav());
+    final recordingItem = await service.importAudioFile(source.path);
+    await File(recordingItem.transcriptPath).writeAsString('previous text');
+    await Directory(recordingItem.transcriptJsonPath).create();
+    await expectLater(
+      service.saveTranscript(recordingItem,
+        const TranscriptionResult(text: 'new text', segments: [])),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(await File(recordingItem.transcriptPath).readAsString(),
+        'previous text');
+  });
+
+  test('a failed TXT copy does not discard the committed transcript', () async {
+    final source = await File('${root.path}/source.wav').writeAsBytes(wav());
+    final recordingItem = await service.importAudioFile(source.path);
+    await Directory(recordingItem.transcriptPath).create();
+    await service.saveTranscript(recordingItem,
+        const TranscriptionResult(text: 'saved JSON', segments: []));
+    expect((await service.loadRecordings()).single.transcript, 'saved JSON');
+  });
+
+  test('old TXT-only recordings still load', () async {
+    final source = await File('${root.path}/source.wav').writeAsBytes(wav());
+    final recordingItem = await service.importAudioFile(source.path);
+    await File(recordingItem.transcriptPath).writeAsString('old text');
+    expect((await service.loadRecordings()).single.transcript, 'old text');
+    await File(recordingItem.transcriptJsonPath).writeAsString('{broken JSON');
+    expect((await service.loadRecordings()).single.transcript, 'old text');
+  });
+
+  test('an empty committed JSON does not resurrect stale TXT content', () async {
+    final source = await File('${root.path}/source.wav').writeAsBytes(wav());
+    final recordingItem = await service.importAudioFile(source.path);
+    await File(recordingItem.transcriptPath).writeAsString('old text');
+    await File(recordingItem.transcriptJsonPath).writeAsString(
+        jsonEncode(const TranscriptionResult(text: '', segments: []).toJson()));
+    expect((await service.loadRecordings()).single.transcript, isEmpty);
   });
 
   test('reload does not recover the currently active recording', () async {

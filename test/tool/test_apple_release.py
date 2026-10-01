@@ -9,6 +9,18 @@ from tool import prepare_apple_release as release
 
 
 class AppleReleaseTest(unittest.TestCase):
+    def test_version_follows_source_instead_of_old_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            with patch.object(release, "ROOT", root):
+                for value, expected in [("0.1.0+9", ("0.1.0", "9")),
+                                        ("0.1.2+10", ("0.1.2", "10"))]:
+                    (root / "pubspec.yaml").write_text(f"version: {value}\n")
+                    self.assertEqual(release.app_version(), expected)
+                (root / "pubspec.yaml").write_text("version: 0.1+10\n")
+                with self.assertRaises(ValueError):
+                    release.app_version()
+
     def test_prepare_keeps_existing_storage_locations(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

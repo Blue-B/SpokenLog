@@ -6,10 +6,11 @@ param(
 $ErrorActionPreference = 'Stop'
 $ReleaseDir = (Resolve-Path -LiteralPath $ReleaseDir).Path
 $versionText = Get-Content (Join-Path $PSScriptRoot '../pubspec.yaml') -Raw
-if ($versionText -notmatch '(?m)^version:\s*0\.1\.0\+(\d+)\s*$') { throw 'Expected 0.1.0+build.' }
-$buildNumber = $Matches[1]
+if ($versionText -notmatch '(?m)^version:\s*(\d+\.\d+\.\d+)\+(\d+)\s*$') { throw 'Expected major.minor.patch+build.' }
+$appVersion = $Matches[1]
+$buildNumber = $Matches[2]
 $exe = Join-Path $ReleaseDir 'SpokenLog.exe'
-if ((Get-Item $exe).VersionInfo.ProductVersion -ne "0.1.0+$buildNumber") { throw 'Executable/source version mismatch.' }
+if ((Get-Item $exe).VersionInfo.ProductVersion -ne "$appVersion+$buildNumber") { throw 'Executable/source version mismatch.' }
 foreach ($file in @('flutter_windows.dll', 'sherpa-onnx-c-api.dll', 'onnxruntime.dll', 'url_launcher_windows_plugin.dll', 'vcruntime140.dll', 'msvcp140.dll')) {
     if (-not (Test-Path -LiteralPath (Join-Path $ReleaseDir $file))) { throw "Missing runtime: $file" }
 }
@@ -34,6 +35,6 @@ try {
             $zip, $_.FullName, $name, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
     }
 } finally { $zip.Dispose() }
-& $Compiler "/DReleaseDir=$stage" "/DOutputDir=$OutputDir" "/DBuildNumber=$buildNumber" (Join-Path $PSScriptRoot 'windows/SpokenLog.iss')
+& $Compiler "/DReleaseDir=$stage" "/DOutputDir=$OutputDir" "/DAppVersion=$appVersion" "/DBuildNumber=$buildNumber" (Join-Path $PSScriptRoot 'windows/SpokenLog.iss')
 if ($LASTEXITCODE -ne 0) { throw 'Installer compilation failed.' }
 Get-FileHash -Algorithm SHA256 (Join-Path $OutputDir 'SpokenLog-Windows-x64.zip'), (Join-Path $OutputDir 'SpokenLog-Windows-x64-Setup.exe')
