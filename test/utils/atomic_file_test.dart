@@ -24,12 +24,32 @@ void main() {
       file,
       contents,
     ).whenComplete(() => finished = true);
-    while (!finished) {
-      expect(jsonDecode(await file.readAsString())['generation'], anyOf(0, 1));
+    try {
+      while (!finished) {
+        try {
+          expect(jsonDecode(await file.readAsString())['generation'], anyOf(0, 1));
+        } on FileSystemException catch (error) {
+          // Windows may also deny readers briefly during replacement. Check
+          // content whenever readable, but do not treat a sharing lock as JSON.
+          final code = error.osError?.errorCode;
+          if (!Platform.isWindows || (code != 5 && code != 32)) rethrow;
+        }
+      }
+    } finally {
+      await write;
     }
-    await write;
     expect(await file.readAsString(), contents);
     expect((await root.list().toList()).length, 1);
+  });
+
+  test('replacement waits for a briefly open Windows reader', () async {
+    final file = await File('${root.path}/locked.json').writeAsString('old');
+    final reader = await file.open();
+    final write = writeStringAtomically(file, 'new');
+    await Future<void>.delayed(const Duration(milliseconds: 100));
+    await reader.close();
+    await write;
+    expect(await file.readAsString(), 'new');
   });
 
   test(
