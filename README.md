@@ -17,6 +17,10 @@ Version **0.1.2, build 10** keeps the build 9 transcription improvements and add
 
 [Installation guide](docs/installation.md) | [Checksums](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.2/SHA256SUMS.txt) | [Release notes and verification scope](docs/releases/v0.1.2.md)
 
+## Upcoming maintenance release
+
+Version **0.1.3, build 11** is being validated. It fixes WAV duration display, large-text layouts and settings-save error feedback. It is **not published yet**; the download links above still point to 0.1.2. See the [candidate notes and remaining checks](docs/releases/v0.1.3.md).
+
 ## Features
 
 - Recording library with search, collections, favorites and timestamped playback.

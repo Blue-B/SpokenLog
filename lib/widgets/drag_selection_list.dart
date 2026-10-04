@@ -10,18 +10,25 @@ class DragSelectionList extends StatefulWidget {
     required this.selected,
     required this.onSelectionChanged,
     required this.itemBuilder,
+    this.header,
+    this.primary = false,
   });
   final List<String> ids;
   final Set<String> selected;
   final ValueChanged<Set<String>> onSelectionChanged;
   final IndexedWidgetBuilder itemBuilder;
+  final Widget? header;
+  final bool primary;
 
   @override
   State<DragSelectionList> createState() => _DragSelectionListState();
 }
 
 class _DragSelectionListState extends State<DragSelectionList> {
-  final _scroll = ScrollController();
+  final _ownedScroll = ScrollController();
+  ScrollController get _scroll => widget.primary
+      ? PrimaryScrollController.of(context)
+      : _ownedScroll;
   final _viewport = GlobalKey();
   final _rows = <String, GlobalKey>{};
   Timer? _timer;
@@ -114,8 +121,13 @@ class _DragSelectionListState extends State<DragSelectionList> {
     key: _viewport,
     controller: _scroll,
     padding: const EdgeInsets.symmetric(vertical: 5),
-    itemCount: widget.ids.length,
-    itemBuilder: (context, index) => GestureDetector(
+    itemCount: widget.ids.length + (widget.header == null ? 0 : 1),
+    itemBuilder: (context, index) {
+      if (widget.header != null) {
+        if (index == 0) return widget.header!;
+        index--;
+      }
+      return GestureDetector(
       key: _rows.putIfAbsent(widget.ids[index], GlobalKey.new),
       behavior: HitTestBehavior.opaque,
       onLongPressStart: (details) => _start(index, details.globalPosition),
@@ -126,13 +138,14 @@ class _DragSelectionListState extends State<DragSelectionList> {
       onLongPressEnd: (_) => _end(),
       onLongPressCancel: _end,
       child: widget.itemBuilder(context, index),
-    ),
+    );
+    },
   );
 
   @override
   void dispose() {
     _end();
-    _scroll.dispose();
+    _ownedScroll.dispose();
     super.dispose();
   }
 }

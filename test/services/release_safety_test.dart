@@ -322,6 +322,47 @@ void main() {
     });
   }
 
+  test('WAV import stores duration and preserves the source', () async {
+    final source = await File('${root.path}/source.wav')
+        .writeAsBytes(wav(seconds: 7, rate: 48000, channels: 2));
+    final original = await source.readAsBytes();
+    final imported = await service.importAudioFile(source.path);
+    expect(imported.durationMs, 7000);
+    final metadata = jsonDecode(await File(imported.metadataPath).readAsString());
+    expect(metadata['chunks'][0]['durationMs'], 7000);
+    expect((await service.loadRecordings()).single.durationMs, 7000);
+    expect(await source.readAsBytes(), original);
+    expect(await File(imported.audioPaths.single).readAsBytes(), original);
+  });
+
+  test('old zero-duration imports and legacy WAVs load without rewriting files', () async {
+    final source = await File('${root.path}/source.wav')
+        .writeAsBytes(wav(seconds: 7));
+    final imported = await service.importAudioFile(source.path);
+    final metadataFile = File(imported.metadataPath);
+    final metadata = jsonDecode(await metadataFile.readAsString());
+    metadata['chunks'][0]['durationMs'] = 0;
+    final originalMetadata = jsonEncode(metadata);
+    await metadataFile.writeAsString(originalMetadata);
+    final legacy = await File('${root.path}/recordings/legacy.wav')
+        .writeAsBytes(wav(seconds: 2));
+    final loaded = await service.loadRecordings();
+    expect(loaded.firstWhere((r) => r.id == imported.id).durationMs, 7000);
+    expect(loaded.firstWhere((r) => r.isLegacy).durationMs, 2000);
+    expect(await metadataFile.readAsString(), originalMetadata);
+    expect(await legacy.readAsBytes(), wav(seconds: 2));
+  });
+
+  test('unknown or invalid audio duration does not prevent import', () async {
+    for (final extension in ['wav', 'mp3']) {
+      final source = await File('${root.path}/unknown.$extension')
+          .writeAsBytes([1, 2, 3]);
+      final imported = await service.importAudioFile(source.path);
+      expect(imported.durationMs, 0);
+      expect(await File(imported.audioPaths.single).readAsBytes(), [1, 2, 3]);
+    }
+  });
+
   test('failed JSON replacement preserves the previous text copy', () async {
     final source = await File('${root.path}/source.wav').writeAsBytes(wav());
     final recordingItem = await service.importAudioFile(source.path);

@@ -451,6 +451,17 @@ class RecordingService {
       );
     }
 
+    // Old imports saved zero duration. Read only the bounded WAV header;
+    // do not rewrite existing audio or metadata during library loading.
+    if (dir.path != _activeSessionDir?.path) {
+      for (final file in audioFiles) {
+        final name = file.uri.pathSegments.last;
+        if ((durations[name] ?? 0) <= 0) {
+          durations[name] = await readWavDurationMs(file);
+        }
+      }
+    }
+
     final chunks = audioFiles
         .map(
           (file) => RecordingChunk(
@@ -507,7 +518,10 @@ class RecordingService {
       id: file.uri.pathSegments.last,
       title: metadata['title']?.toString(),
       createdAt: stat.modified,
-      chunks: [RecordingChunk(audioPath: file.path, durationMs: 0)],
+      chunks: [RecordingChunk(
+        audioPath: file.path,
+        durationMs: await readWavDurationMs(file),
+      )],
       storagePath: file.path,
       transcript: transcript,
       segments: segments,
@@ -598,7 +612,8 @@ class RecordingService {
         '${sessionDir.path}${Platform.pathSeparator}$targetName';
 
     try {
-      await source.copy(targetPath);
+      final importedFile = await source.copy(targetPath);
+      final durationMs = await readWavDurationMs(importedFile);
 
       final metadata = <String, dynamic>{
         'version': 5,
@@ -615,7 +630,7 @@ class RecordingService {
         'chunks': [
           {
             'file': targetName,
-            'durationMs': 0,
+            'durationMs': durationMs,
           },
         ],
       };
@@ -632,7 +647,7 @@ class RecordingService {
         chunks: [
           RecordingChunk(
             audioPath: targetPath,
-            durationMs: 0,
+            durationMs: durationMs,
           ),
         ],
         storagePath: sessionDir.path,

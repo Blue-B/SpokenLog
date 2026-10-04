@@ -57,6 +57,46 @@ void main() {
     },
   );
 
+  testWidgets('nested mobile scrolling keeps header out of selection indexes',
+      (tester) async {
+    var selected = <String>{};
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: StatefulBuilder(
+        builder: (context, setState) => NestedScrollView(
+          headerSliverBuilder: (_, _) => [
+            const SliverToBoxAdapter(child: SizedBox(height: 160)),
+          ],
+          body: DragSelectionList(
+            primary: true,
+            header: const SizedBox(height: 80, child: Text('Search header')),
+            ids: List.generate(30, (i) => '$i'),
+            selected: selected,
+            onSelectionChanged: (ids) => setState(() => selected = ids),
+            itemBuilder: (_, i) => SizedBox(
+              key: ValueKey('nested-row-$i'), height: 70, child: Text('$i')),
+          ),
+        ),
+      )),
+    ));
+    await tester.drag(find.byType(NestedScrollView), const Offset(0, -240));
+    await tester.pumpAndSettle();
+    expect(selected, isEmpty);
+    final hold = await tester.startGesture(
+      tester.getCenter(find.byKey(const ValueKey('nested-row-2'))));
+    await tester.pump(const Duration(milliseconds: 600));
+    expect(selected, {'2'});
+    final viewport = tester.getRect(find.byType(DragSelectionList));
+    await hold.moveTo(Offset(viewport.center.dx, viewport.bottom - 5));
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(milliseconds: 65));
+    }
+    expect(selected.length, greaterThan(3));
+    expect(selected, isNot(contains('0')));
+    await hold.up();
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets(
     'ordinary scrolling does not select; holding near edge scrolls and extends range',
     (tester) async {

@@ -207,6 +207,9 @@ class FakeSettingsService implements SettingsService {
 
   @override
   Future<void> setProvider(TranscriptionProvider value) async {
+    if (saveShouldThrow) {
+      throw PlatformException(code: '-25308', message: 'sk-super-secret');
+    }
     provider = value;
   }
 
@@ -381,6 +384,8 @@ Future<void> pumpHome(
 }
 
 Future<void> openRecordingDetails(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('First clip').first);
+  await tester.pumpAndSettle();
   await tester.tap(find.text('First clip').first);
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
@@ -1027,6 +1032,79 @@ void main() {
     );
 
     // No RenderFlex overflow should have been reported.
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('quick settings scroll in landscape with large text and retry storage errors',
+      (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    final settings = FakeSettingsService(
+      provider: TranscriptionProvider.localWhisper,
+      appLanguage: 'en',
+      saveShouldThrow: true,
+    );
+    await pumpHome(tester,
+      recording: FakeRecordingService([buildItem(wavPath)]),
+      settings: settings, player: player,
+      size: const Size(640, 360), textScale: 1.5);
+    await tester.tap(find.text('Whisper Tiny INT8 · Auto detect'));
+    await tester.pumpAndSettle();
+    expect(find.text('Quick speech settings'), findsOneWidget);
+    expect(find.text('자동 감지'), findsNothing);
+    final apply = find.widgetWithText(FilledButton, 'Apply');
+    await tester.ensureVisible(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Could not save settings.'), findsOneWidget);
+    expect(find.textContaining('sk-super-secret'), findsNothing);
+    expect(tester.takeException(), isNull);
+    settings.saveShouldThrow = false;
+    await tester.ensureVisible(apply);
+    await tester.pumpAndSettle();
+    await tester.tap(apply);
+    await tester.pumpAndSettle();
+    expect(find.text('Quick speech settings'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('small phone large-text library scrolls headers away and opens full row',
+      (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester,
+      recording: FakeRecordingService([buildItem(wavPath)]),
+      settings: FakeSettingsService(appLanguage: 'en'), player: player,
+      size: const Size(360, 640), textScale: 1.5);
+    expect(tester.takeException(), isNull, reason: 'initial library layout');
+    await tester.drag(find.byType(NestedScrollView), const Offset(0, -500));
+    await tester.pumpAndSettle();
+    final row = find.text('First clip');
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    final rect = tester.getRect(row);
+    expect(rect.top, greaterThanOrEqualTo(0));
+    expect(rect.bottom, lessThan(640));
+    expect(tester.takeException(), isNull, reason: 'scrolled library layout');
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(find.byType(RecordingDetailsSheet), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('English untitled recording and playback controls are localized',
+      (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester,
+      recording: FakeRecordingService([buildItem(wavPath, title: null)]),
+      settings: FakeSettingsService(appLanguage: 'en'), player: player);
+    expect(find.text('새 녹음'), findsNothing);
+    await tester.tap(find.text('New recording').last);
+    await tester.pumpAndSettle();
+    expect(inDetails(find.byTooltip('Play')), findsOneWidget);
+    expect(inDetails(find.byTooltip('재생')), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

@@ -185,6 +185,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String _t(String ko, String en) => _useEnglish ? en : ko;
 
+  String _title(RecordingItem item) => item.title?.trim().isNotEmpty == true
+      ? item.displayTitle
+      : _t('새 녹음', 'New recording');
+
+  String get _settingsSaveError => _t(
+    '설정을 저장하지 못했습니다. 보안 저장소 잠금과 접근 권한을 확인한 뒤 다시 시도해 주세요.',
+    'Could not save settings. Check that secure storage is unlocked and accessible, then try again.',
+  );
+
   bool _sameDay(DateTime a, DateTime b) =>
       a.year == b.year && a.month == b.month && a.day == b.day;
 
@@ -339,7 +348,7 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       _resetRecordingClock();
       await _reload();
-      _message('녹음을 안전하게 저장했습니다.');
+      _message(_t('녹음을 안전하게 저장했습니다.', 'Recording saved safely.'));
     } catch (e) {
       if (!await _recording.isRecording() && mounted) {
         setState(() {
@@ -376,7 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } catch (e) {
-      _message('녹음 상태를 변경하지 못했습니다: $e', error: true);
+      _message(_t('녹음 상태를 변경하지 못했습니다: $e', 'Could not change recording state: $e'), error: true);
     }
   }
 
@@ -965,6 +974,8 @@ class _HomeScreenState extends State<HomeScreen> {
     var provider = await _settings.getProvider();
     var language = await _settings.getTranscriptionLanguage();
     var model = await _settings.getModel(provider);
+    var saving = false;
+    String? saveError;
     // Switching engines must keep each engine's saved model, not reset it.
     final savedModels = {
       for (final value in TranscriptionProvider.values)
@@ -979,7 +990,8 @@ class _HomeScreenState extends State<HomeScreen> {
       isScrollControlled: true,
       builder: (sheetContext) => StatefulBuilder(
         builder: (sheetContext, setSheetState) {
-          return Padding(
+          return SingleChildScrollView(
+            child: Padding(
             padding: EdgeInsets.fromLTRB(
               20,
               4,
@@ -1009,6 +1021,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 18),
                 DropdownButtonFormField<TranscriptionProvider>(
                   value: provider,
+                  isExpanded: true,
                   decoration: InputDecoration(
                     labelText: _t('음성 인식 방식', 'Speech recognition'),
                     prefixIcon: Icon(
@@ -1025,7 +1038,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       )
                       .toList(),
-                  onChanged: (next) {
+                  onChanged: saving ? null : (next) {
                     if (next == null) return;
                     setSheetState(() {
                       provider = next;
@@ -1037,6 +1050,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 12),
                 DropdownButtonFormField<TranscriptionLanguage>(
                   value: language,
+                  isExpanded: true,
                   decoration: InputDecoration(
                     labelText: _t('녹음 언어', 'Recording language'),
                     prefixIcon: const Icon(Icons.translate_rounded),
@@ -1046,11 +1060,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       .map(
                         (entry) => DropdownMenuItem(
                           value: entry,
-                          child: Text(entry.label),
+                          child: Text(entry.displayLabel(useEnglish: _useEnglish)),
                         ),
                       )
                       .toList(),
-                  onChanged: (next) {
+                  onChanged: saving ? null : (next) {
                     if (next != null) {
                       setSheetState(() => language = next);
                     }
@@ -1060,6 +1074,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     value: model,
+                    isExpanded: true,
                     decoration: InputDecoration(
                       labelText: _t('모델', 'Model'),
                       prefixIcon: const Icon(Icons.tune_rounded),
@@ -1072,42 +1087,60 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         )
                         .toList(),
-                    onChanged: (next) {
+                    onChanged: saving ? null : (next) {
                       if (next != null) setSheetState(() => model = next);
                     },
                   ),
                 ],
                 const SizedBox(height: 18),
-                Row(
+                if (saveError != null)
+                  Text(saveError!, style: TextStyle(
+                    color: Theme.of(sheetContext).colorScheme.error,
+                  )),
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
                   children: [
                     TextButton.icon(
-                      onPressed: () {
+                      onPressed: saving ? null : () {
                         Navigator.pop(sheetContext);
                         unawaited(_openSettings(initialProvider: provider));
                       },
                       icon: const Icon(Icons.language_rounded),
                       label: Text(_t('세부 설정', 'More settings')),
                     ),
-                    const Spacer(),
                     FilledButton(
-                      onPressed: () async {
-                        await _settings.setProvider(provider);
-                        await _settings.setTranscriptionLanguage(language);
-                        await _settings.setModel(provider, model);
-                        await _syncWhisperSize();
-                        if (!mounted) return;
-                        setState(() {
-                          _provider = provider;
-                          _language = language;
-                          _model = model;
-                        });
-                        if (sheetContext.mounted) Navigator.pop(sheetContext);
+                      onPressed: saving ? null : () async {
+                        setSheetState(() { saving = true; saveError = null; });
+                        try {
+                          await _settings.setProvider(provider);
+                          await _settings.setTranscriptionLanguage(language);
+                          await _settings.setModel(provider, model);
+                          await _syncWhisperSize();
+                          if (!mounted) return;
+                          _refreshRecordingViews(() {
+                            _provider = provider;
+                            _language = language;
+                            _model = model;
+                          });
+                          if (sheetContext.mounted) Navigator.pop(sheetContext);
+                        } catch (_) {
+                          if (sheetContext.mounted) {
+                            setSheetState(() {
+                              saving = false;
+                              saveError = _settingsSaveError;
+                            });
+                          }
+                        }
                       },
                       child: Text(_t('적용', 'Apply')),
                     ),
                   ],
                 ),
               ],
+            ),
             ),
           );
         },
@@ -1191,18 +1224,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       unawaited(_openSettings(initialProvider: entry));
                       return;
                     }
-                    final nextLanguage =
-                        _compatibleLanguage(entry, _language);
-                    final nextModel = await _settings.getModel(entry);
-                    await _settings.setProvider(entry);
-                    await _settings.setTranscriptionLanguage(nextLanguage);
-                    if (!mounted) return;
-                    setState(() {
-                      _provider = entry;
-                      _language = nextLanguage;
-                      _model = nextModel;
-                    });
-                    if (sheetContext.mounted) Navigator.pop(sheetContext);
+                    try {
+                      final nextLanguage =
+                          _compatibleLanguage(entry, _language);
+                      final nextModel = await _settings.getModel(entry);
+                      await _settings.setProvider(entry);
+                      await _settings.setTranscriptionLanguage(nextLanguage);
+                      if (!mounted) return;
+                      _refreshRecordingViews(() {
+                        _provider = entry;
+                        _language = nextLanguage;
+                        _model = nextModel;
+                      });
+                      if (sheetContext.mounted) Navigator.pop(sheetContext);
+                    } catch (_) {
+                      if (sheetContext.mounted) Navigator.pop(sheetContext);
+                      _message(_settingsSaveError, error: true);
+                    }
                   },
                 ),
               );
@@ -2445,6 +2483,7 @@ class _HomeScreenState extends State<HomeScreen> {
     await _syncWhisperSize();
 
     if (saved == true) {
+      try {
       await _settings.setProvider(provider);
       await _settings.setTranscriptionLanguage(language);
       await _settings.setSpeakerDiarizationEnabled(diarizationEnabled);
@@ -2486,6 +2525,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _message(
         _t('${provider.label} · ${language.label} 설정이 저장되었습니다.', '${provider.label} · ${language.displayLabel(useEnglish: true)} settings saved.'),
       );
+      } catch (_) {
+        _message(_settingsSaveError, error: true);
+      }
     }
 
     groqController.dispose();
@@ -2551,8 +2593,8 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(_t('휴지통으로 이동할까요?', 'Move to Trash?')),
         content: Text(
           _t(
-            '“${item.displayTitle}”은(는) 휴지통으로 이동합니다. 휴지통에서 다시 복원할 수 있습니다.',
-            '“${item.displayTitle}” will be moved to Trash and can be restored later.',
+            '“${_title(item)}”은(는) 휴지통으로 이동합니다. 휴지통에서 다시 복원할 수 있습니다.',
+            '“${_title(item)}” will be moved to Trash and can be restored later.',
           ),
         ),
         actions: [
@@ -2590,8 +2632,8 @@ class _HomeScreenState extends State<HomeScreen> {
         title: Text(_t('완전히 삭제할까요?', 'Delete permanently?')),
         content: Text(
           _t(
-            '“${item.displayTitle}”의 원본 녹음과 전사문이 완전히 삭제됩니다. 이 작업은 되돌릴 수 없습니다.',
-            'The audio and transcript for “${item.displayTitle}” will be permanently deleted. This cannot be undone.',
+            '“${_title(item)}”의 원본 녹음과 전사문이 완전히 삭제됩니다. 이 작업은 되돌릴 수 없습니다.',
+            'The audio and transcript for “${_title(item)}” will be permanently deleted. This cannot be undone.',
           ),
         ),
         actions: [
@@ -2741,7 +2783,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return scoped.where((item) {
       final collection = _collectionById(item.collectionId);
       final haystack = [
-        item.displayTitle,
+        _title(item),
         item.fileName,
         item.transcript ?? '',
         collection?.name ?? '',
@@ -2756,7 +2798,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final files = await FilePicker.pickFiles(
-        dialogTitle: '오디오 또는 영상 파일 가져오기',
+        dialogTitle: _t('오디오 또는 영상 파일 가져오기', 'Import audio or video files'),
         type: FileType.custom,
         allowedExtensions: RecordingService.supportedImportExtensions,
       );
@@ -2768,13 +2810,13 @@ class _HomeScreenState extends State<HomeScreen> {
           .toList();
       await _importAudioPaths(paths);
     } catch (e) {
-      _message('파일 선택 창을 열지 못했습니다: $e', error: true);
+      _message(_t('파일 선택 창을 열지 못했습니다: $e', 'Could not open file picker: $e'), error: true);
     }
   }
 
   Future<void> _importAudioPaths(Iterable<String> paths) async {
     if (_isRecording) {
-      _message('녹음을 종료한 뒤 파일을 가져와 주세요.', error: true);
+      _message(_t('녹음을 종료한 뒤 파일을 가져와 주세요.', 'Stop recording before importing files.'), error: true);
       return;
     }
     if (_importingFiles) return;
@@ -2792,7 +2834,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (supported.isEmpty) {
       _message(
-        '가져올 수 있는 파일이 없습니다. WAV, M4A, MP3, MP4, WebM을 지원합니다.',
+        _t('가져올 수 있는 파일이 없습니다. WAV, M4A, MP3, MP4, WebM을 지원합니다.', 'No supported files. Use WAV, M4A, MP3, MP4 or WebM.'),
         error: true,
       );
       return;
@@ -2828,18 +2870,20 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (imported > 0) {
         final cloudNote = hasNonWav
-            ? ' WAV 외 형식은 현재 클라우드 전사를 사용해 주세요.'
+            ? _t(' WAV 외 형식은 현재 클라우드 전사를 사용해 주세요.', ' Use cloud transcription for non-WAV files.')
             : '';
-        final skippedNote =
-            skipped > 0 ? ' 지원하지 않는 파일 $skipped개는 건너뛰었습니다.' : '';
+        final skippedNote = skipped > 0
+            ? _t(' 지원하지 않는 파일 $skipped개는 건너뛰었습니다.', ' Skipped $skipped unsupported files.')
+            : '';
         final failureNote = failures.isNotEmpty
-            ? ' 가져오지 못한 파일 ${failures.length}개가 있습니다.'
+            ? _t(' 가져오지 못한 파일 ${failures.length}개가 있습니다.', ' Could not import ${failures.length} files.')
             : '';
         _message(
-          '$imported개 파일을 가져왔습니다.$cloudNote$skippedNote$failureNote',
+          _t('$imported개 파일을 가져왔습니다.', 'Imported $imported files.') +
+              cloudNote + skippedNote + failureNote,
         );
       } else {
-        _message('파일을 가져오지 못했습니다.', error: true);
+        _message(_t('파일을 가져오지 못했습니다.', 'Could not import files.'), error: true);
       }
     } finally {
       if (mounted) {
@@ -2881,10 +2925,10 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final saved = await _transcriptExport.save(item, format);
       if (saved) {
-        _message('${format.label} 파일로 내보냈습니다.');
+        _message(_t('${format.label} 파일로 내보냈습니다.', 'Exported ${format.label} file.'));
       }
     } catch (e) {
-      _message('전사문을 내보내지 못했습니다: $e', error: true);
+      _message(_t('전사문을 내보내지 못했습니다: $e', 'Could not export transcript: $e'), error: true);
     }
   }
 
@@ -3851,7 +3895,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     IconButton.filled(
                       tooltip:
-                          active && _isPlayingAudio ? '일시정지' : '재생',
+                          active && _isPlayingAudio ? _t('일시정지', 'Pause') : _t('재생', 'Play'),
                       onPressed:
                           _isRecording ? null : () => _togglePlayback(item),
                       icon: Icon(
@@ -3891,7 +3935,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     IconButton.filled(
                       tooltip:
-                          active && _isPlayingAudio ? '일시정지' : '재생',
+                          active && _isPlayingAudio ? _t('일시정지', 'Pause') : _t('재생', 'Play'),
                       onPressed:
                           _isRecording ? null : () => _togglePlayback(item),
                       icon: Icon(
@@ -3930,7 +3974,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!item.hasTranscript) {
       return Container(
-        height: 180,
+        constraints: const BoxConstraints(minHeight: 180),
+        padding: const EdgeInsets.all(12),
         alignment: Alignment.center,
         decoration: BoxDecoration(
           color: scheme.surfaceContainerLowest,
@@ -4076,7 +4121,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _pendingTranscription.contains(item.id);
     final active = _activePlayback?.id == item.id;
     final durationText =
-        item.durationMs > 0 ? formatDuration(item.duration) : _t('길이 확인 중', 'Checking duration');
+        item.durationMs > 0 ? formatDuration(item.duration) : _t('길이 정보 없음', 'Duration unavailable');
     final bytes = _fileBytes(item);
 
     Widget titleBlock() {
@@ -4084,7 +4129,7 @@ class _HomeScreenState extends State<HomeScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            item.displayTitle,
+            _title(item),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
@@ -4574,7 +4619,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         children: [
                           Expanded(
                             child: Text(
-                              item.displayTitle,
+                              _title(item),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: Theme.of(context)
@@ -5163,7 +5208,7 @@ class _HomeScreenState extends State<HomeScreen> {
         item.durationMs > 0 ? formatDuration(item.duration) : '--:--';
 
     return CalendarAgendaRecordingTile(
-      title: item.displayTitle,
+      title: _title(item),
       metaLabel: '${formatRecordingDate(item.createdAt.toLocal())} · $duration',
       preview: _recordingPreview(item),
       hasTranscript: item.hasTranscript,
@@ -5607,30 +5652,30 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMobileRecordsList(List<RecordingItem> items) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Column(
-      children: [
-        _buildSidebarHeader(),
-        Divider(height: 1, color: scheme.outlineVariant),
-        Expanded(
-          child: items.isEmpty
-              ? _buildEmptyState(searchEmpty: _query.isNotEmpty)
-              : DragSelectionList(
-                  ids: items.map((item) => item.id).toList(),
-                  selected: _batchSelectedIds,
-                  onSelectionChanged: _setBatchSelection,
-                  itemBuilder: (context, index) {
-                    final item = items[index];
-                    return _buildCompactRecordingTile(
-                      item,
-                      onTap: () => unawaited(_showRecordingDetails(item)),
-                      dragSelection: true,
-                    );
-                  },
-                ),
-        ),
-      ],
+    final header = Column(children: [
+      _buildSidebarHeader(),
+      Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
+    ]);
+    if (items.isEmpty) {
+      return ListView(children: [
+        header,
+        _buildEmptyState(searchEmpty: _query.isNotEmpty),
+      ]);
+    }
+    return DragSelectionList(
+      primary: true,
+      header: header,
+      ids: items.map((item) => item.id).toList(),
+      selected: _batchSelectedIds,
+      onSelectionChanged: _setBatchSelection,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return _buildCompactRecordingTile(
+          item,
+          onTap: () => unawaited(_showRecordingDetails(item)),
+          dragSelection: true,
+        );
+      },
     );
   }
 
@@ -5641,7 +5686,7 @@ class _HomeScreenState extends State<HomeScreen> {
         : items.where((item) {
             final collection = _collectionById(item.collectionId);
             final haystack = [
-              item.displayTitle,
+              _title(item),
               item.fileName,
               item.transcript ?? '',
               collection?.name ?? '',
@@ -5728,8 +5773,10 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        return Column(
-          children: [
+        return NestedScrollView(
+          headerSliverBuilder: (context, innerBoxIsScrolled) => [
+            SliverToBoxAdapter(child: Column(children: [
+              _buildTopBar(),
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
               child: SegmentedButton<_WorkspaceView>(
@@ -5752,12 +5799,11 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             _buildMobileScopeSelector(),
-            Expanded(
-              child: _workspaceView == _WorkspaceView.calendar
-                  ? _buildCalendarWorkspace()
-                  : _buildMobileScopeBody(filtered),
-            ),
+            ])),
           ],
+          body: _workspaceView == _WorkspaceView.calendar
+              ? _buildCalendarWorkspace()
+              : _buildMobileScopeBody(filtered),
         );
       },
     );
@@ -5844,7 +5890,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final mainContent = SafeArea(
       child: Column(
         children: [
-          _buildTopBar(),
           Expanded(
             child: _loading
                 ? const Center(child: CircularProgressIndicator())
