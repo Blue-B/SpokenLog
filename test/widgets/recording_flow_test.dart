@@ -773,11 +773,12 @@ void main() {
     expect(playCalls, greaterThanOrEqualTo(2));
   });
 
-  testWidgets('detail sheet follows HomeScreen data refreshes (rename)',
+  for (final english in [false, true]) {
+  testWidgets('rename dialog is localized and refreshes details ($english)',
       (tester) async {
     final item = buildItem(wavPath);
     final recording = FakeRecordingService([item]);
-    final settings = FakeSettingsService();
+    final settings = FakeSettingsService(appLanguage: english ? 'en' : 'ko');
     final player = FakeAudioPlayer();
     addTearDown(player.dispose);
 
@@ -788,22 +789,29 @@ void main() {
     expect(find.text('First clip'), findsWidgets);
 
     // Use the in-sheet management menu to rename, which triggers _reload.
-    await tester.tap(find.byTooltip('기록 메뉴').last);
+    await tester.tap(find.byTooltip(english ? 'Recording menu' : '기록 메뉴').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
-    await tester.tap(find.text('이름 변경').last);
+    expect(tester.takeException(), isNull, reason: 'recording action menu');
+    await tester.tap(find.text(english ? 'Rename' : '이름 변경').last);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 250));
 
+    expect(find.text(english ? 'Rename recording' : '녹음 이름 변경'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, english ? 'Cancel' : '취소'), findsOneWidget);
+    expect(tester.widget<TextField>(find.byType(TextField).last).decoration?.hintText,
+        english ? 'e.g. Weekly meeting' : '예: 주간 회의');
     await tester.enterText(find.byType(TextField).last, 'Renamed session');
-    await tester.tap(find.text('저장'));
+    await tester.tap(find.text(english ? 'Save' : '저장'));
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
     // The still-open detail sheet must show the refreshed title.
     expect(find.byType(RecordingDetailsSheet), findsOneWidget);
     expect(find.text('Renamed session'), findsWidgets);
+    expect(tester.takeException(), isNull);
   });
+  }
 
   testWidgets('missing Groq key opens CloudCredentialsDialog above the '
       'recording sheet with inline validation and cancel', (tester) async {

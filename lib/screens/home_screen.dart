@@ -2540,26 +2540,26 @@ class _HomeScreenState extends State<HomeScreen> {
     final result = await showDialog<String>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('녹음 이름 변경'),
+        title: Text(_t('녹음 이름 변경', 'Rename recording')),
         content: TextFormField(
           initialValue: title,
           onChanged: (value) => title = value,
           autofocus: true,
           maxLength: 80,
-          decoration: const InputDecoration(
-            hintText: '예: 주간 회의',
-            prefixIcon: Icon(Icons.edit_outlined),
+          decoration: InputDecoration(
+            hintText: _t('예: 주간 회의', 'e.g. Weekly meeting'),
+            prefixIcon: const Icon(Icons.edit_outlined),
           ),
           onFieldSubmitted: (value) => Navigator.pop(context, value),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('취소'),
+            child: Text(_t('취소', 'Cancel')),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(context, title),
-            child: const Text('저장'),
+            child: Text(_t('저장', 'Save')),
           ),
         ],
       ),
@@ -4178,7 +4178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       const Icon(Icons.restore_rounded, size: 19),
                       const SizedBox(width: 10),
-                      Text(_t('복원', 'Restore')),
+                      Flexible(child: Text(_t('복원', 'Restore'))),
                     ],
                   ),
                 ),
@@ -4188,7 +4188,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       const Icon(Icons.delete_forever_rounded, size: 19),
                       const SizedBox(width: 10),
-                      Text(_t('완전 삭제', 'Delete permanently')),
+                      Flexible(child: Text(_t('완전 삭제', 'Delete permanently'))),
                     ],
                   ),
                 ),
@@ -4200,7 +4200,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       const Icon(Icons.edit_outlined, size: 19),
                       const SizedBox(width: 10),
-                      Text(_t('이름 변경', 'Rename')),
+                      Flexible(child: Text(_t('이름 변경', 'Rename'))),
                     ],
                   ),
                 ),
@@ -4215,11 +4215,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         size: 19,
                       ),
                       const SizedBox(width: 10),
-                      Text(
+                      Flexible(child: Text(
                         item.isFavorite
                             ? _t('즐겨찾기 해제', 'Remove from favorites')
                             : _t('즐겨찾기', 'Add to favorites'),
-                      ),
+                      )),
                     ],
                   ),
                 ),
@@ -4229,7 +4229,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       const Icon(Icons.drive_file_move_outline, size: 19),
                       const SizedBox(width: 10),
-                      Text(_t('보관함으로 이동', 'Move to collection')),
+                      Flexible(child: Text(_t('보관함으로 이동', 'Move to collection'))),
                     ],
                   ),
                 ),
@@ -4240,7 +4240,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       children: [
                         const Icon(Icons.folder_open_outlined, size: 19),
                         const SizedBox(width: 10),
-                        Text(_t('파일 위치 열기', 'Show in folder')),
+                        Flexible(child: Text(_t('파일 위치 열기', 'Show in folder'))),
                       ],
                     ),
                   ),
@@ -4250,7 +4250,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     children: [
                       const Icon(Icons.delete_outline, size: 19),
                       const SizedBox(width: 10),
-                      Text(_t('휴지통으로 이동', 'Move to Trash')),
+                      Flexible(child: Text(_t('휴지통으로 이동', 'Move to Trash'))),
                     ],
                   ),
                 ),

@@ -6,20 +6,18 @@ https://github.com/user-attachments/assets/cf12c70e-a913-4209-887f-9ed36139ffa6
 
 ## Download
 
-Version **0.1.2, build 10** keeps the build 9 transcription improvements and adds safer local saves and bounded cloud requests. Back up important recordings before updating.
+Download the [latest release](https://github.com/Blue-B/SpokenLog/releases/latest) for your platform. Back up important recordings before updating.
 
 | Platform | Download | Note |
 | --- | --- | --- |
-| Android 7.0+ | [APK](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.2/SpokenLog-Android.apk) | Development-signed |
-| Windows x64 | [Setup.exe (recommended)](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.2/SpokenLog-Windows-x64-Setup.exe) / [ZIP (no install)](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.2/SpokenLog-Windows-x64.zip) | Unsigned |
-| macOS 12+ | [ZIP](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.2/SpokenLog-macOS.zip) | Not notarized |
-| iOS / iPadOS 15+ | [Unsigned IPA](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.2/SpokenLog-iOS-unsigned.ipa) | Re-signing required; not tap-to-install |
+| Android 7.0+ | [APK](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-Android.apk) | Development-signed |
+| Windows x64 | [Setup.exe (recommended)](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-Windows-x64-Setup.exe) / [ZIP (no install)](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-Windows-x64.zip) | Unsigned |
+| macOS 12+ | [ZIP](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-macOS.zip) | Not notarized |
+| iOS / iPadOS 15+ | [Unsigned IPA](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-iOS-unsigned.ipa) | Re-signing required; not tap-to-install |
 
-[Installation guide](docs/installation.md) | [Checksums](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.2/SHA256SUMS.txt) | [Release notes and verification scope](docs/releases/v0.1.2.md)
+These are direct-download builds, not App Store or Google Play releases. Follow the [installation guide](docs/installation.md) for your platform.
 
-## Upcoming maintenance release
-
-Version **0.1.3, build 11** is being validated. It fixes WAV duration display, large-text layouts and settings-save error feedback. It is **not published yet**; the download links above still point to 0.1.2. See the [candidate notes and remaining checks](docs/releases/v0.1.3.md).
+[Checksums](https://github.com/Blue-B/SpokenLog/releases/latest/download/SHA256SUMS.txt) | [Release notes, known issues and verification scope](https://github.com/Blue-B/SpokenLog/releases/latest)
 
 ## Features
 
@@ -29,14 +27,8 @@ Version **0.1.3, build 11** is being validated. It fixes WAV duration display, l
 
 Local transcription keeps audio on your device and currently requires WAV. Cloud transcription uploads audio to the selected provider. The interface supports English and Korean; spoken-language support depends on the engine.
 
-## Changes in 0.1.2
-
-- Recording metadata is replaced through a staged file, and checkpoint writes finish in order before the final recording state is saved.
-- Transcript text, segments and speaker labels are loaded from one JSON snapshot. Older TXT-only recordings still load; TXT is kept as a compatibility copy.
-- Cloud requests have a 10-minute limit per audio part, covering upload and the full response. The connection is closed on completion or timeout.
-
 ## Documentation
 
-[Features and formats](docs/features.md) | [Build from source](docs/development.md) | [Data management and removal](docs/desktop-removal.md) | [Release notes](docs/releases/v0.1.2.md)
+[Features and formats](docs/features.md) | [Build from source](docs/development.md) | [Data management and removal](docs/desktop-removal.md) | [Release history](https://github.com/Blue-B/SpokenLog/releases)
 
 [AGPL-3.0-only](LICENSE) | [Branding policy](TRADEMARKS.md)

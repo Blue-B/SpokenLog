@@ -2,17 +2,17 @@
 
 [Back to README](../README.md)
 
-Download [v0.1.2, build 10](https://github.com/Blue-B/SpokenLog/releases/tag/v0.1.2) using the links in the [README](../README.md), then follow the instructions for your platform. This version continues the build 9 source line and adds safer local saves and cloud-request time limits. Earlier release tags are retained for reference.
+Download the [latest release](https://github.com/Blue-B/SpokenLog/releases/latest) using the links in the [README](../README.md), then follow the instructions for your platform. Earlier releases are retained for reference.
 
-Back up recordings before updating. These packages are not store-signed releases. The [release notes](releases/v0.1.2.md) distinguish source tests, package checks and real-device checks.
+Back up recordings before updating. These packages are not store-signed releases. The [release notes](https://github.com/Blue-B/SpokenLog/releases/latest) distinguish source tests, package checks and real-device checks.
 
 ## Known issues
 
 Build 9 fixes local Whisper's 30-second truncation and adds Tiny, Base and Small selection. Long WAV files are transcribed in pieces. Whisper subtitle times are approximate, not word-accurate, and may need manual editing. Moonshine is no longer selectable; existing downloaded files are not deleted.
 
-Synthetic-speech transcription passed with the final Windows release DLLs, the Android emulator release app, the macOS release app and an iPhone simulator build. These checks do not establish real-device microphone, background or interruption behavior. Some imported WAV details remained at “Checking duration” / `--:--` even though transcription succeeded. Some English-mode messages still appear in Korean.
+WAV duration is read when importing files and when loading older WAV recordings with missing duration. Other formats can still have unavailable duration. Some English-mode messages can still appear in Korean. Transcription checks with synthetic speech do not establish real-device microphone, background or interruption behavior.
 
-See the [0.1.2 release notes](releases/v0.1.2.md) for the current verification scope. The [historical build 9 details](releases/v0.1.0-build9-details.md) document earlier runtime checks, recording limits and remaining license-review gaps; they are not fresh execution checks of 0.1.2.
+See the [latest release notes](https://github.com/Blue-B/SpokenLog/releases/latest) for the current verification scope. The [historical build 9 details](releases/v0.1.0-build9-details.md) document earlier runtime checks, recording limits and remaining license-review gaps; they are not fresh execution checks of the latest release.
 
 ## Choose a package
 
@@ -37,7 +37,7 @@ The Android APK currently uses a development signing key. Much older APKs signed
 
 The app is ad-hoc signed, not Apple-notarized. This manual installation route does not require a paid Apple developer account or weekly signing renewal. Do not disable Gatekeeper system-wide or bypass a malware warning. See [Apple's instructions](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac).
 
-Build 9 was tested on a remote M2 Mac for app launch, Base selection and saving, native WAV import and 20-segment transcription. The CI machine needed an isolated, normally unlocked test Keychain. The full download-and-approval flow on an ordinary user's Mac remains unverified.
+Remote M2 Mac checks are described in the release notes. The CI machine needed an isolated, normally unlocked test Keychain. The full download-and-approval flow on an ordinary user's Mac remains unverified.
 
 ## iPhone and iPad installation
 
