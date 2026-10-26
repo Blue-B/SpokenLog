@@ -270,6 +270,9 @@ class FakeSettingsService implements SettingsService {
   Future<int> getSpeakerCount() async => 0;
 
   @override
+  Future<bool> getMcpEnabled() async => false;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) =>
       super.noSuchMethod(invocation);
 }
@@ -936,13 +939,18 @@ void main() {
     await tester.pump(const Duration(milliseconds: 350));
     expect(find.byType(AppSettingsSheet), findsOneWidget);
 
+    // Top-to-bottom order: the list builds lazily, so scroll down to each.
+    final list = find.descendant(
+        of: find.byType(AppSettingsSheet), matching: find.byType(Scrollable));
     for (final key in const [
-      'settings-groq',
-      'settings-cloudflare',
+      'settings-display-language',
       'settings-local-models',
       'settings-transcription',
-      'settings-display-language',
+      'settings-groq',
+      'settings-cloudflare',
     ]) {
+      await tester.scrollUntilVisible(find.byKey(ValueKey(key)), 100,
+          scrollable: list.first);
       expect(find.byKey(ValueKey(key)), findsOneWidget, reason: key);
     }
 

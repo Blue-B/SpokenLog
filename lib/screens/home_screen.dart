@@ -145,11 +145,13 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_reload().then((_) => _importSharedFiles()));
+      if (!mounted) return;
+      unawaited(_reload().then((_) => _importSharedFiles()));
+      // After the first frame, so a failure can show a message.
+      if (_mcpSupported) unawaited(_restoreMcp());
     });
     unawaited(_loadTranscriptionPreference());
     unawaited(_loadUiPreferences());
-    if (_mcpSupported) unawaited(_restoreMcp());
   }
 
   // Desktop only: phones suspend background apps, so a local server would vanish.
@@ -812,7 +814,10 @@ class _HomeScreenState extends State<HomeScreen> {
               await _settings.getSpeakerDiarizationEnabled())) {
         _refreshRecordingViews(() => _transcribingProgress[item.id] =
             _t('WAV로 변환하고 있습니다.', 'Converting to WAV...'));
-        final converted = await _recording.convertRecordingToWav(item);
+        // A failed conversion falls through; the engine reports the format.
+        final converted = await _recording
+            .convertRecordingToWav(item)
+            .catchError((Object _) => null);
         if (converted != null) {
           item = converted;
           await _reload();
