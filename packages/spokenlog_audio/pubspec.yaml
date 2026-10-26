@@ -1,0 +1,27 @@
+name: spokenlog_audio
+description: SpokenLog native audio picker, WAV decoder and file intake.
+version: 0.0.1
+publish_to: 'none'
+
+environment:
+  sdk: '>=3.12.0 <4.0.0'
+  flutter: '>=3.3.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: io.github.blueb.spokenlog_audio
+        pluginClass: SpokenlogAudioPlugin
+      ios:
+        pluginClass: SpokenlogAudioPlugin
+        sharedDarwinSource: true
+      macos:
+        pluginClass: SpokenlogAudioPlugin
+        sharedDarwinSource: true
+      windows:
+        pluginClass: SpokenlogAudioPluginCApi

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
@@ -14,12 +15,11 @@ import 'background_recording_service.dart';
 import 'local_wav_input.dart';
 
 class RecordingService {
+  /// Non-WAV files are decoded to WAV on import; ones the platform cannot
+  /// decode are kept as-is for cloud transcription.
   static const supportedImportExtensions = <String>[
-    'wav',
-    'm4a',
-    'mp3',
-    'mp4',
-    'webm',
+    'wav', 'm4a', 'mp3', 'aac', 'flac', 'ogg', 'opus', 'amr', '3gp', 'wma',
+    'aif', 'aiff', 'caf', 'mp4', 'm4v', 'mov', 'webm', 'mkv',
   ];
 
   static bool isSupportedImportPath(String path) {
@@ -27,6 +27,61 @@ class RecordingService {
     return supportedImportExtensions.any(
       (extension) => lower.endsWith('.$extension'),
     );
+  }
+
+  static const _audioChannel = MethodChannel('spokenlog_audio');
+
+  /// Platforms whose native decoder (packages/spokenlog_audio) can make WAV.
+  static bool get canDecodeAudio =>
+      Platform.isAndroid || Platform.isIOS || Platform.isMacOS ||
+      Platform.isWindows;
+
+  /// Decodes compressed audio to 16 kHz mono WAV so on-device engines and
+  /// speaker separation can read it. Returns false when it cannot.
+  Future<bool> _decodeToWav(String source, String target) async {
+    if (!canDecodeAudio) return false;
+    try {
+      await _audioChannel.invokeMethod<void>(
+          'convertToWav', {'source': source, 'target': target});
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Replaces a recording's non-WAV audio with a decoded WAV in place.
+  /// Returns null when nothing could be converted.
+  Future<RecordingItem?> convertRecordingToWav(RecordingItem item) async {
+    if (item.isLegacy) return null;
+    final dir = Directory(item.storagePath);
+    final metadataFile =
+        File('${dir.path}${Platform.pathSeparator}session.json');
+    var converted = false;
+    for (final chunk in item.chunks) {
+      final source = File(chunk.audioPath);
+      final name = source.uri.pathSegments.last;
+      final dot = name.lastIndexOf('.');
+      if (dot < 0 || name.toLowerCase().endsWith('.wav')) continue;
+      final wavName = '${name.substring(0, dot)}.wav';
+      final wavPath = '${dir.path}${Platform.pathSeparator}$wavName';
+      if (!await _decodeToWav(source.path, wavPath)) return null;
+
+      final metadata = await _readJsonFile(metadataFile);
+      final rawChunks = metadata['chunks'];
+      if (rawChunks is List) {
+        for (final raw in rawChunks.whereType<Map>()) {
+          if (raw['file'] == name) {
+            raw['file'] = wavName;
+            raw['durationMs'] = await readWavDurationMs(File(wavPath));
+          }
+        }
+        await writeStringAtomically(metadataFile, jsonEncode(metadata));
+      }
+      // The library lists every audio file in the folder, so drop the original.
+      await source.delete();
+      converted = true;
+    }
+    return converted ? _loadSession(dir) : null;
   }
 
   AudioRecorder _recorder = AudioRecorder();
@@ -588,7 +643,7 @@ class RecordingService {
     }
     if (!isSupportedImportPath(source.path)) {
       throw Exception(
-        '지원하지 않는 파일 형식입니다. WAV, M4A, MP3, MP4, WebM을 사용할 수 있습니다.',
+        '지원하지 않는 파일 형식입니다. 오디오 또는 영상 파일을 사용해 주세요.',
       );
     }
 
@@ -607,12 +662,22 @@ class RecordingService {
     final dot = sourceName.lastIndexOf('.');
     final extension = dot >= 0 ? sourceName.substring(dot).toLowerCase() : '';
     final title = dot > 0 ? sourceName.substring(0, dot) : sourceName;
-    final targetName = 'imported$extension';
-    final targetPath =
+    var targetName = 'imported$extension';
+    var targetPath =
         '${sessionDir.path}${Platform.pathSeparator}$targetName';
 
     try {
-      final importedFile = await source.copy(targetPath);
+      final wavPath =
+          '${sessionDir.path}${Platform.pathSeparator}imported.wav';
+      final File importedFile;
+      if (extension != '.wav' && await _decodeToWav(source.path, wavPath)) {
+        targetName = 'imported.wav';
+        targetPath = wavPath;
+        importedFile = File(wavPath);
+      } else {
+        // Without a decoder the original is kept; cloud transcription still reads it.
+        importedFile = await source.copy(targetPath);
+      }
       final durationMs = await readWavDurationMs(importedFile);
 
       final metadata = <String, dynamic>{

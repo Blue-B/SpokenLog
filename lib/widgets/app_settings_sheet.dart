@@ -11,6 +11,7 @@ class AppSettingsSheet extends StatelessWidget {
     this.useEnglish = false,
     this.onStorage,
     this.onLicenses,
+    this.onAiConnection,
   });
 
   final VoidCallback onGroq;
@@ -21,6 +22,7 @@ class AppSettingsSheet extends StatelessWidget {
   final bool useEnglish;
   final VoidCallback? onStorage;
   final VoidCallback? onLicenses;
+  final VoidCallback? onAiConnection;
 
   String _t(String ko, String en) => useEnglish ? en : ko;
 
@@ -81,14 +83,20 @@ class AppSettingsSheet extends StatelessWidget {
                 heading(_t('음성 인식', 'Speech recognition')),
                 entry('settings-local-models', Icons.download_for_offline_outlined,
                     _t('로컬 모델 관리', 'Local models'),
-                    _t('모델 다운로드·삭제, 화자 구분',
-                        'Download or remove models; speaker separation'),
+                    _t('음성 인식·화자 구분 모델 다운로드와 삭제',
+                        'Download or remove speech and speaker models'),
                     onLocalModels),
                 entry('settings-transcription', Icons.tune_rounded,
                     _t('전사 방식과 녹음 언어', 'Transcription and audio language'),
-                    _t('엔진 선택, 모델, 음성 언어',
-                        'Choose an engine, model and spoken language'),
+                    _t('온라인/기기 처리, 엔진, 음성 언어, 화자 구분',
+                        'Online or on-device, engine, spoken language, speakers'),
                     onTranscription),
+                if (onAiConnection != null)
+                  entry('settings-ai-connection', Icons.hub_outlined,
+                      _t('AI 연결 (MCP)', 'AI connection (MCP)'),
+                      _t('Claude, Codex, pi 등에서 녹음 검색·읽기',
+                          'Let Claude, Codex, pi and others search recordings'),
+                      onAiConnection!),
                 heading(_t('클라우드 연결', 'Cloud connections')),
                 entry('settings-groq', Icons.key_outlined, 'Groq',
                     _t('API 키 등록 및 변경', 'Add or change your API key'), onGroq),

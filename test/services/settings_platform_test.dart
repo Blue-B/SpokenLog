@@ -16,11 +16,12 @@ void main() {
     });
     try {
       await SettingsService().clearAppSettings();
-      expect(calls, hasLength(17));
+      expect(calls, hasLength(19));
       expect(calls.every((call) => call.method == 'delete'), isTrue);
       expect(calls.map((call) => call.arguments['key']), containsAll([
         'groq_api_key', 'cloudflare_api_token', 'cloudflare_account_id',
         'app_language', 'transcription_provider', 'local_whisper_model',
+        'mcp_enabled', 'mcp_token',
       ]));
     } finally {
       messenger.setMockMethodCallHandler(channel, null);

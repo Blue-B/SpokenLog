@@ -22,7 +22,11 @@ There is no app-imposed recording timer, but recording is not unlimited. At 16 k
 | Format | Local transcription | Cloud transcription |
 | --- | --- | --- |
 | WAV | Supported input | Supported input |
-| M4A / MP3 / MP4 / WebM | Not yet | Supported, subject to upload limits |
+| M4A / MP3 / AAC / FLAC / OGG / Opus / AMR / 3GP / WMA / AIFF / CAF / MP4 / MOV / WebM / MKV | Converted to 16 kHz mono WAV on import, then supported | Supported (as WAV after conversion) |
+
+Non-WAV imports are decoded with the OS media framework (Android MediaCodec, Apple AVFoundation, Windows Media Foundation), so which formats convert depends on the platform: for example WebM/OGG usually convert on Android but not on iPhone/Mac, and WMA only on Windows. A file that cannot be converted is kept as-is and can still use cloud transcription. Recordings imported as non-WAV by earlier versions are converted the first time local transcription or speaker separation runs.
+
+On Android the import picker opens in the Samsung Voice Recorder folder (`Recordings/Voice Recorder`) when it exists. On iPhone, Voice Memos recordings cannot be browsed by other apps; share a recording from Voice Memos and choose SpokenLog to import it.
 
 Large non-WAV files above the current cloud upload chunk limit are not automatically split. Large WAV cloud uploads use temporary WAV chunks that are cleaned up afterward. The original recording remains one file.
 

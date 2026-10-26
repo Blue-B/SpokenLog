@@ -47,6 +47,10 @@ class AppleReleaseTest(unittest.TestCase):
             ios_info = plistlib.loads((root / "ios/Runner/Info.plist").read_bytes())
             self.assertIs(mac_info["FLTEnableImpeller"], False)
             self.assertNotIn("FLTEnableImpeller", ios_info)
+            self.assertEqual(ios_info["CFBundleDocumentTypes"],
+                             release.IOS_DOCUMENT_TYPES)
+            self.assertIs(ios_info["LSSupportsOpeningDocumentsInPlace"], False)
+            self.assertNotIn("CFBundleDocumentTypes", mac_info)
             for name in ("Release.entitlements", "DebugProfile.entitlements"):
                 actual = plistlib.loads((root / "macos/Runner" / name).read_bytes())
                 self.assertEqual(actual, release.MACOS_ENTITLEMENTS)

@@ -14,6 +14,8 @@ class SettingsService {
   static const _speakerDiarizationEnabledKey = 'speaker_diarization_enabled';
   static const _speakerCountKey = 'speaker_count';
   static const _appLanguageKey = 'app_language';
+  static const _mcpEnabledKey = 'mcp_enabled';
+  static const _mcpTokenKey = 'mcp_token';
 
   static const _groqUsageDateKey = 'groq_usage_date';
   static const _groqUsageSecondsKey = 'groq_usage_seconds';
@@ -38,6 +40,7 @@ class SettingsService {
       _speakerCountKey, _appLanguageKey, _groqUsageDateKey, _groqUsageSecondsKey,
       _groqRemainingRequestsKey, _groqLimitRequestsKey, _groqQuotaUpdatedAtKey,
       _cloudflareUsageDateKey, _cloudflareUsageSecondsKey,
+      _mcpEnabledKey, _mcpTokenKey,
     ]) {
       await _storage.delete(key: key);
     }
@@ -268,6 +271,18 @@ class SettingsService {
       value: language.storageId,
     );
   }
+
+  Future<bool> getMcpEnabled() async =>
+      (await _storage.read(key: _mcpEnabledKey)) == '1';
+
+  Future<void> setMcpEnabled(bool value) =>
+      _storage.write(key: _mcpEnabledKey, value: value ? '1' : '0');
+
+  /// Secret that AI tools put in the local MCP address.
+  Future<String?> getMcpToken() => _storage.read(key: _mcpTokenKey);
+
+  Future<void> setMcpToken(String value) =>
+      _storage.write(key: _mcpTokenKey, value: value);
 
   Future<bool> getSpeakerDiarizationEnabled() async {
     return (await _storage.read(key: _speakerDiarizationEnabledKey)) == '1';

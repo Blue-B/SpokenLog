@@ -42,14 +42,14 @@ class WhisperTranscriptionService {
         provider: 'Local Whisper',
         message:
             '로컬 Whisper는 WAV 녹음만 지원합니다. '
-            '가져온 M4A/MP3/MP4/WebM 파일은 클라우드 전사를 사용해 주세요.',
+            'WAV로 자동 변환하지 못한 파일은 클라우드 전사를 사용해 주세요.',
       );
     }
 
     await ensureLocalWavInputs(
       audioPaths: recording.audioPaths,
       provider: 'Local Whisper',
-      containerHint: 'M4A/MP3/MP4/WebM 파일은 클라우드 전사를 사용해 주세요.',
+      containerHint: 'WAV로 변환되지 않은 파일은 클라우드 전사를 사용해 주세요.',
     );
 
     if (!language.supportedByWhisper) {

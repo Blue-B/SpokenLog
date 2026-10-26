@@ -40,14 +40,14 @@ class SenseVoiceTranscriptionService {
         provider: 'Local SenseVoice',
         message:
             '로컬 SenseVoice는 WAV 녹음만 지원합니다. '
-            '가져온 M4A/MP3/MP4/WebM 파일은 Groq 또는 Cloudflare로 전사해 주세요.',
+            'WAV로 자동 변환하지 못한 파일은 Groq 또는 Cloudflare로 전사해 주세요.',
       );
     }
 
     await ensureLocalWavInputs(
       audioPaths: recording.audioPaths,
       provider: 'Local SenseVoice',
-      containerHint: 'M4A/MP3/MP4/WebM 파일은 Groq 또는 Cloudflare로 전사해 주세요.',
+      containerHint: 'WAV로 변환되지 않은 파일은 Groq 또는 Cloudflare로 전사해 주세요.',
     );
 
     if (!language.supportedBySenseVoice) {

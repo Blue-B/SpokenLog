@@ -16,6 +16,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUNDLE_ID = "io.github.blueb.spokenlog"
+# Lists SpokenLog in the share sheet for audio, e.g. Voice Memos > Share.
+# iOS copies the file into the app; the spokenlog_audio plugin imports it.
+IOS_DOCUMENT_TYPES = [{
+    "CFBundleTypeName": "Audio or video",
+    "CFBundleTypeRole": "Viewer",
+    "LSHandlerRank": "Alternate",
+    "LSItemContentTypes": ["public.audio", "public.movie"],
+}]
 # Keep the existing direct-download app's Documents/Support and login Keychain.
 # Enabling App Sandbox here would silently switch existing users to a container.
 MACOS_ENTITLEMENTS = {
@@ -67,8 +75,11 @@ def prepare() -> None:
     modes = list(dict.fromkeys([*original.get("UIBackgroundModes", []), "audio"]))
     update_plist(info, {"CFBundleDisplayName": "SpokenLog",
                        "NSMicrophoneUsageDescription": microphone,
-                       "UIBackgroundModes": modes})
-    print("Apple app identity, microphone and background recording configured.")
+                       "UIBackgroundModes": modes,
+                       "CFBundleDocumentTypes": IOS_DOCUMENT_TYPES,
+                       "LSSupportsOpeningDocumentsInPlace": False})
+    print("Apple app identity, microphone, background recording and audio "
+          "sharing configured.")
 
 
 def verify_macos_signature(app: Path) -> dict:
@@ -100,6 +111,8 @@ def verify_packages() -> None:
         if not info.get("NSMicrophoneUsageDescription") or \
                 "audio" not in info.get("UIBackgroundModes", []):
             raise ValueError("Missing recording permissions")
+        if info.get("CFBundleDocumentTypes") != IOS_DOCUMENT_TYPES:
+            raise ValueError("Missing audio share-sheet registration")
         if len(archive.read("Payload/Runner.app/Runner")) < 1024:
             raise ValueError("Missing compiled iOS executable")
     with zipfile.ZipFile(mac_zip) as archive:

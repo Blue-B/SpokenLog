@@ -33,6 +33,10 @@ import '../widgets/app_settings_sheet.dart';
 import '../widgets/cloud_credentials_dialog.dart';
 import '../widgets/cloud_connection_help.dart';
 import '../widgets/drag_selection_list.dart';
+import '../widgets/local_models_dialog.dart';
+import '../widgets/mcp_settings_dialog.dart';
+import '../services/mcp_server.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../widgets/storage_management_dialog.dart';
 import '../widgets/recording_details_sheet.dart';
 
@@ -76,6 +80,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<RecordingItem> _items = const [];
   List<RecordingCollection> _collections = const [];
+  SpokenLogMcpServer? _mcp;
   bool _isRecording = false;
   bool _startingRecording = false;
   bool _isPausedRecording = false;
@@ -134,11 +139,96 @@ class _HomeScreenState extends State<HomeScreen> {
     _speakerDiarization =
         SpeakerDiarizationService(_speakerDiarizationModelManager);
     _initPlayer();
+    if (Platform.isIOS) {
+      _audioChannel.setMethodCallHandler((call) async {
+        if (call.method == 'filesOpened') await _importSharedFiles();
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) unawaited(_reload());
+      if (mounted) unawaited(_reload().then((_) => _importSharedFiles()));
     });
     unawaited(_loadTranscriptionPreference());
     unawaited(_loadUiPreferences());
+    if (_mcpSupported) unawaited(_restoreMcp());
+  }
+
+  // Desktop only: phones suspend background apps, so a local server would vanish.
+  bool get _mcpSupported => Platform.isWindows || Platform.isMacOS;
+
+  Future<void> _restoreMcp() async {
+    try {
+      if (await _settings.getMcpEnabled()) await _startMcp();
+    } catch (e) {
+      _message(_t('AI 연결(MCP)을 시작하지 못했습니다: $e', 'Could not start AI connection (MCP): $e'),
+          error: true);
+    }
+  }
+
+  /// Serves the in-memory library, so it always matches what the app shows.
+  Future<String> _startMcp() async {
+    await _mcp?.stop();
+    var token = await _settings.getMcpToken();
+    if (token == null || token.isEmpty) {
+      token = SpokenLogMcpServer.newToken();
+      await _settings.setMcpToken(token);
+    }
+    final server = SpokenLogMcpServer(
+      recordings: () async => _items,
+      collections: () async => _collections,
+      token: token,
+    );
+    try {
+      await server.start();
+    } on SocketException {
+      throw _t('포트 ${server.port}을 다른 프로그램이 사용 중입니다.',
+          'Port ${server.port} is used by another program.');
+    }
+    _mcp = server;
+    return server.url;
+  }
+
+  Future<void> _showMcpSettings() async {
+    await showDialog<void>(
+      context: context,
+      builder: (_) => McpSettingsDialog(
+        useEnglish: _useEnglish,
+        url: _mcp?.url,
+        onToggle: (enable) async {
+          if (enable) {
+            final url = await _startMcp();
+            await _settings.setMcpEnabled(true);
+            return url;
+          }
+          await _mcp?.stop();
+          _mcp = null;
+          await _settings.setMcpEnabled(false);
+          return null;
+        },
+        onResetToken: () async {
+          await _settings.setMcpToken(SpokenLogMcpServer.newToken());
+          return _startMcp();
+        },
+        onOpenGuide: () => unawaited(launchUrl(
+            Uri.parse('https://github.com/Blue-B/SpokenLog/blob/main/docs/mcp.md'),
+            mode: LaunchMode.externalApplication)),
+      ),
+    );
+  }
+
+  static const _audioChannel = MethodChannel('spokenlog_audio');
+
+  /// Imports files shared into the app on iOS (Voice Memos > Share > SpokenLog).
+  Future<void> _importSharedFiles() async {
+    if (!Platform.isIOS) return;
+    try {
+      final paths =
+          await _audioChannel.invokeListMethod<String>('takeOpenedFiles') ??
+              const [];
+      if (paths.isNotEmpty && mounted) await _importAudioPaths(paths);
+    } catch (_) {
+      _message(_t('공유된 파일을 가져오지 못했습니다.', 'Could not import shared files.'),
+          error: true);
+    }
   }
 
   /// Keeps the Whisper model manager on the size saved in settings.
@@ -713,6 +803,20 @@ class _HomeScreenState extends State<HomeScreen> {
           _transcribingProgress[item.id] =
               _t('$completed / $total 조각 전사 완료', '$completed / $total chunks transcribed');
         });
+      }
+
+      // Older imports kept M4A/MP3; local engines and speaker separation need WAV.
+      if (RecordingService.canDecodeAudio &&
+          item.audioPaths.any((p) => !p.toLowerCase().endsWith('.wav')) &&
+          (provider.isLocal ||
+              await _settings.getSpeakerDiarizationEnabled())) {
+        _refreshRecordingViews(() => _transcribingProgress[item.id] =
+            _t('WAV로 변환하고 있습니다.', 'Converting to WAV...'));
+        final converted = await _recording.convertRecordingToWav(item);
+        if (converted != null) {
+          item = converted;
+          await _reload();
+        }
       }
 
       var result = switch (provider) {
@@ -1305,12 +1409,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 useEnglish: _useEnglish,
                 onGroq: () => unawaited(_showCloudCredentials(TranscriptionProvider.groq)),
                 onCloudflare: () => unawaited(_showCloudCredentials(TranscriptionProvider.cloudflare)),
-                onLocalModels: () => unawaited(_openSettings(
-                    initialProvider: _provider.isLocal
-                        ? _provider : TranscriptionProvider.localSenseVoice)),
+                onLocalModels: () => unawaited(_showLocalModels()),
                 onTranscription: () => unawaited(_openSettings()),
                 onDisplayLanguage: () => unawaited(_showLanguageSettings()),
                 onStorage: () => unawaited(_showStorageManagement()),
+                onAiConnection: _mcpSupported
+                    ? () => unawaited(_showMcpSettings())
+                    : null,
                 onLicenses: () => showLicensePage(
                   context: context,
                   applicationName: 'SpokenLog',
@@ -1322,6 +1427,52 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  Future<void> _showLocalModels() async {
+    LocalModelEntry entry(String id, String title, String subtitle,
+        Future<bool> Function() isInstalled,
+        Future<void> Function({void Function(double?, String)? onProgress})
+            download,
+        Future<void> Function() delete) {
+      return LocalModelEntry(
+        id: id,
+        title: title,
+        subtitle: subtitle,
+        isInstalled: isInstalled,
+        download: (onProgress) =>
+            download(onProgress: (progress, _) => onProgress(progress)),
+        delete: delete,
+      );
+    }
+
+    final sense = _senseVoiceModelManager;
+    final speakers = _speakerDiarizationModelManager;
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => LocalModelsDialog(
+        useEnglish: _useEnglish,
+        models: [
+          entry('sensevoice', 'SenseVoice',
+              _t('한국어·영어·중국어·일본어·광둥어 · 약 239MB',
+                  'Korean, English, Chinese, Japanese, Cantonese · about 239 MB'),
+              sense.isInstalled, sense.download, sense.deleteModel),
+          for (final size in WhisperModelSize.values)
+            () {
+              final whisper = WhisperModelManager(size: size);
+              return entry(size.modelId,
+                  TranscriptionProvider.localWhisper
+                      .modelLabel(size.modelId, useEnglish: _useEnglish),
+                  _t('여러 언어 범용 전사', 'General multilingual transcription'),
+                  whisper.isInstalled, whisper.download, whisper.deleteModel);
+            }(),
+          entry('speaker_diarization', _t('화자 구분', 'Speaker separation'),
+              _t('화자 1, 화자 2 표시용 · 약 42MB', 'Speaker 1, Speaker 2 labels · about 42 MB'),
+              speakers.isInstalled, speakers.download, speakers.deleteModel),
+        ],
       ),
     );
   }
@@ -1339,6 +1490,11 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (_) => StorageManagementDialog(
           onClearSettings: _settings.clearAppSettings, useEnglish: _useEnglish));
     if (!mounted) return;
+    // A settings reset deletes the MCP switch and secret; stop the old server too.
+    if (_mcp != null && !await _settings.getMcpEnabled()) {
+      await _mcp?.stop();
+      _mcp = null;
+    }
     _clearBatchSelection();
     await _reload();
     await _loadTranscriptionPreference();
@@ -2797,17 +2953,23 @@ class _HomeScreenState extends State<HomeScreen> {
     if (_isRecording || _importingFiles) return;
 
     try {
-      final files = await FilePicker.pickFiles(
-        dialogTitle: _t('오디오 또는 영상 파일 가져오기', 'Import audio or video files'),
-        type: FileType.custom,
-        allowedExtensions: RecordingService.supportedImportExtensions,
-      );
-      if (files.isEmpty) return;
-
-      final paths = files
-          .map((file) => file.path)
-          .whereType<String>()
-          .toList();
+      final List<String> paths;
+      if (Platform.isAndroid) {
+        // Native picker so it opens in the Samsung Voice Recorder folder.
+        paths = await _audioChannel.invokeListMethod<String>('pickAudio') ??
+            const [];
+      } else {
+        final files = await FilePicker.pickFiles(
+          dialogTitle: _t('오디오 또는 영상 파일 가져오기', 'Import audio or video files'),
+          type: FileType.custom,
+          allowedExtensions: RecordingService.supportedImportExtensions,
+        );
+        paths = files
+            .map((file) => file.path)
+            .whereType<String>()
+            .toList();
+      }
+      if (paths.isEmpty) return;
       await _importAudioPaths(paths);
     } catch (e) {
       _message(_t('파일 선택 창을 열지 못했습니다: $e', 'Could not open file picker: $e'), error: true);
@@ -2834,7 +2996,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (supported.isEmpty) {
       _message(
-        _t('가져올 수 있는 파일이 없습니다. WAV, M4A, MP3, MP4, WebM을 지원합니다.', 'No supported files. Use WAV, M4A, MP3, MP4 or WebM.'),
+        _t('가져올 수 있는 파일이 없습니다. 오디오 또는 영상 파일을 선택해 주세요.', 'No supported files. Choose audio or video files.'),
         error: true,
       );
       return;
@@ -2855,7 +3017,8 @@ class _HomeScreenState extends State<HomeScreen> {
           final item = await _recording.importAudioFile(path);
           imported += 1;
           firstImportedId ??= item.id;
-          if (!path.toLowerCase().endsWith('.wav')) {
+          // Android converts imports to WAV; only unconverted files need cloud.
+          if (item.audioPaths.any((p) => !p.toLowerCase().endsWith('.wav'))) {
             hasNonWav = true;
           }
         } catch (e) {
@@ -5871,6 +6034,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    if (Platform.isIOS) _audioChannel.setMethodCallHandler(null);
+    unawaited(_mcp?.stop());
     _recordingTicker?.cancel();
     _positionSubscription?.cancel();
     _durationSubscription?.cancel();
@@ -5960,7 +6125,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'WAV · M4A · MP3 · MP4 · WebM',
+                              'WAV · M4A · MP3 · FLAC · OGG · MP4 …',
                               style: Theme.of(context).textTheme.bodyMedium,
                             ),
                           ],

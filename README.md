@@ -24,11 +24,24 @@ These are direct-download builds, not App Store or Google Play releases. Follow 
 - Recording library with search, collections, favorites and timestamped playback.
 - Local SenseVoice or Whisper (Tiny, Base or Small); cloud transcription with your own Groq or Cloudflare credentials.
 - Transcript editing, local speaker labels, and TXT, SRT, VTT or JSON export.
+- Imports M4A, MP3, FLAC, OGG, MP4 and other audio or video files, converting them to WAV for local transcription. On Android the picker opens in the Samsung Voice Recorder folder; on iPhone, share a recording from Voice Memos to SpokenLog.
+- Read-only AI connection (MCP) on Windows and macOS: let Claude Code, Codex, pi, Claude or ChatGPT search your transcripts.
 
-Local transcription keeps audio on your device and currently requires WAV. Cloud transcription uploads audio to the selected provider. The interface supports English and Korean; spoken-language support depends on the engine.
+Local transcription keeps audio on your device. Cloud transcription uploads audio to the selected provider. The interface supports English and Korean; spoken-language support depends on the engine.
+
+## AI connection (MCP)
+
+Turn on **Settings > AI connection (MCP)** in the desktop app, copy the address, and add it to your AI tool:
+
+```sh
+claude mcp add -s user --transport http spokenlog <address>   # Claude Code
+codex mcp add spokenlog --url <address>                       # Codex
+```
+
+The AI can list, search and read transcripts but cannot change anything. Transcripts it reads go to that AI's provider unless you use a local model. Setup for pi, Claude Desktop, and ChatGPT or Claude on the web (via a tunnel) is in the [AI connection guide](docs/mcp.md).
 
 ## Documentation
 
-[Features and formats](docs/features.md) | [Build from source](docs/development.md) | [Data management and removal](docs/desktop-removal.md) | [Release history](https://github.com/Blue-B/SpokenLog/releases)
+[Features and formats](docs/features.md) | [AI connection (MCP)](docs/mcp.md) | [Build from source](docs/development.md) | [Data management and removal](docs/desktop-removal.md) | [Release history](https://github.com/Blue-B/SpokenLog/releases)
 
 [AGPL-3.0-only](LICENSE) | [Branding policy](TRADEMARKS.md)
