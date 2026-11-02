@@ -138,7 +138,7 @@ class SpokenLogMcpServer {
           'capabilities': {
             'tools': {'listChanged': false},
           },
-          'serverInfo': {'name': 'spokenlog', 'version': '1'},
+          'serverInfo': {'name': 'spokenlog', 'version': '0.2.0'},
           'instructions':
               'Read-only access to the user\'s SpokenLog voice recordings and '
               'transcripts on this computer. Use search_transcripts to find '
