@@ -1,7 +1,8 @@
 import 'dart:io';
 
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
+
+import '../utils/resumable_download.dart';
 
 class WhisperModelPaths {
   const WhisperModelPaths({
@@ -99,7 +100,7 @@ class WhisperModelManager {
     final decoderShare = size.decoderBytes / total;
 
     try {
-      await _downloadFile(
+      await downloadWithResume(
         Uri.parse('$_baseUrl/${size.prefix}-encoder.int8.onnx?download=true'),
         File(p.encoder),
         onProgress: (progress) {
@@ -110,20 +111,18 @@ class WhisperModelManager {
         },
       );
 
-      await _downloadFile(
+      await downloadWithResume(
         Uri.parse('$_baseUrl/${size.prefix}-decoder.int8.onnx?download=true'),
         File(p.decoder),
         onProgress: (progress) {
           onProgress?.call(
-            progress == null
-                ? null
-                : encoderShare + progress * decoderShare,
+            progress == null ? null : encoderShare + progress * decoderShare,
             'Whisper 디코더를 다운로드하고 있습니다.',
           );
         },
       );
 
-      await _downloadFile(
+      await downloadWithResume(
         Uri.parse('$_baseUrl/${size.prefix}-tokens.txt?download=true'),
         File(p.tokens),
         onProgress: (progress) {
@@ -131,8 +130,8 @@ class WhisperModelManager {
             progress == null
                 ? null
                 : encoderShare +
-                    decoderShare +
-                    progress * (1 - encoderShare - decoderShare),
+                      decoderShare +
+                      progress * (1 - encoderShare - decoderShare),
             'Whisper 토큰 파일을 준비하고 있습니다.',
           );
         },
@@ -146,50 +145,6 @@ class WhisperModelManager {
     } catch (_) {
       await _deletePartFiles(dir);
       rethrow;
-    }
-  }
-
-  Future<void> _downloadFile(
-    Uri uri,
-    File target, {
-    required void Function(double? progress) onProgress,
-  }) async {
-    final part = File('${target.path}.part');
-    if (await part.exists()) await part.delete();
-
-    final client = http.Client();
-    IOSink? sink;
-
-    try {
-      final response = await client.send(http.Request('GET', uri));
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-          'Whisper 모델 다운로드에 실패했습니다 '
-          '(HTTP ${response.statusCode}).',
-        );
-      }
-
-      final total = response.contentLength;
-      var received = 0;
-      sink = part.openWrite();
-
-      await for (final chunk in response.stream) {
-        sink.add(chunk);
-        received += chunk.length;
-        onProgress(
-          total != null && total > 0 ? received / total : null,
-        );
-      }
-
-      await sink.flush();
-      await sink.close();
-      sink = null;
-
-      if (await target.exists()) await target.delete();
-      await part.rename(target.path);
-    } finally {
-      await sink?.close();
-      client.close();
     }
   }
 

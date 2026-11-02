@@ -1,13 +1,11 @@
 import 'dart:io';
 
-import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import '../utils/resumable_download.dart';
+
 class SenseVoiceModelPaths {
-  const SenseVoiceModelPaths({
-    required this.model,
-    required this.tokens,
-  });
+  const SenseVoiceModelPaths({required this.model, required this.tokens});
 
   final String model;
   final String tokens;
@@ -61,7 +59,7 @@ class SenseVoiceModelManager {
     final p = await paths();
 
     try {
-      await _downloadFile(
+      await downloadWithResume(
         Uri.parse('$_baseUrl/model.int8.onnx?download=true'),
         File(p.model),
         onProgress: (progress) {
@@ -72,7 +70,7 @@ class SenseVoiceModelManager {
         },
       );
 
-      await _downloadFile(
+      await downloadWithResume(
         Uri.parse('$_baseUrl/tokens.txt?download=true'),
         File(p.tokens),
         onProgress: (progress) {
@@ -90,48 +88,6 @@ class SenseVoiceModelManager {
     } catch (_) {
       await _deletePartFiles(dir);
       rethrow;
-    }
-  }
-
-  Future<void> _downloadFile(
-    Uri uri,
-    File target, {
-    required void Function(double? progress) onProgress,
-  }) async {
-    final part = File('${target.path}.part');
-    if (await part.exists()) await part.delete();
-
-    final client = http.Client();
-    IOSink? sink;
-    try {
-      final request = http.Request('GET', uri);
-      final response = await client.send(request);
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-          '모델 다운로드에 실패했습니다 (HTTP ${response.statusCode}).',
-        );
-      }
-
-      final total = response.contentLength;
-      var received = 0;
-      sink = part.openWrite();
-
-      await for (final chunk in response.stream) {
-        sink.add(chunk);
-        received += chunk.length;
-        onProgress(
-          total != null && total > 0 ? received / total : null,
-        );
-      }
-      await sink.flush();
-      await sink.close();
-      sink = null;
-
-      if (await target.exists()) await target.delete();
-      await part.rename(target.path);
-    } finally {
-      await sink?.close();
-      client.close();
     }
   }
 
