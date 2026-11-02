@@ -12,8 +12,8 @@ Download the [latest release](https://github.com/Blue-B/SpokenLog/releases/lates
 | --- | --- | --- |
 | Android 7.0+ | [APK](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-Android.apk) | Development-signed |
 | Windows x64 | [Setup.exe (recommended)](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-Windows-x64-Setup.exe) / [ZIP (no install)](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-Windows-x64.zip) | Unsigned |
-| macOS 12+ | [ZIP](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-macOS.zip) | Not notarized |
-| iOS / iPadOS 15+ | [Unsigned IPA](https://github.com/Blue-B/SpokenLog/releases/latest/download/SpokenLog-iOS-unsigned.ipa) | Re-signing required; not tap-to-install |
+| macOS 12+ | [ZIP (0.1.3)](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.3/SpokenLog-macOS.zip) | Not notarized; 0.2.0 build pending |
+| iOS / iPadOS 15+ | [Unsigned IPA (0.1.3)](https://github.com/Blue-B/SpokenLog/releases/download/v0.1.3/SpokenLog-iOS-unsigned.ipa) | Re-signing required; not tap-to-install; 0.2.0 build pending |
 
 These are direct-download builds, not App Store or Google Play releases. Follow the [installation guide](docs/installation.md) for your platform.
 
