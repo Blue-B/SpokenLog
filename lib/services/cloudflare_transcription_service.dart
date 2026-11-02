@@ -38,6 +38,8 @@ class CloudflareTranscriptionService {
     try {
       for (var i = 0; i < prepared.files.length; i++) {
         final file = prepared.files[i];
+        // Report before each chunk too, so the first one doesn't look stuck.
+        onProgress?.call(i, prepared.files.length);
         final result = await _transcribeOne(
           audioPath: file.path,
           accountId: accountId,

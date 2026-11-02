@@ -105,6 +105,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   final Set<String> _transcribing = <String>{};
   final Map<String, String> _transcribingProgress = <String, String>{};
+  final Map<String, double> _transcribingFraction = <String, double>{};
+  final Map<String, DateTime> _transcribingStartedAt = <String, DateTime>{};
+  // Repaints the elapsed time so a long chunk never looks frozen.
+  Timer? _transcribeTicker;
   final Set<String> _expandedTranscripts = <String>{};
   bool _batchTranscriptionRunning = false;
   int _batchTranscriptionCompleted = 0;
@@ -791,19 +795,32 @@ class _HomeScreenState extends State<HomeScreen> {
       _provider = provider;
       _model = model;
       _transcribing.add(item.id);
+      _transcribingStartedAt[item.id] = DateTime.now();
       _transcribingProgress[item.id] = provider.isLocal
-          ? _t('기기에서 로컬 전사를 준비하고 있습니다.', 'Preparing on-device transcription...')
-          : _t('전사를 준비하고 있습니다.', 'Preparing transcription...');
+          ? _t('기기에서 전사하고 있습니다', 'Transcribing on device')
+          : _t('전사를 준비하고 있습니다', 'Preparing transcription');
+    });
+    _transcribeTicker ??= Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _transcribing.isEmpty) {
+        timer.cancel();
+        _transcribeTicker = null;
+        return;
+      }
+      _refreshRecordingViews(() {});
     });
 
     TranscriptionProvider? fallback;
 
     try {
       void progress(int completed, int total) {
-        if (!mounted) return;
+        if (!mounted || total <= 0) return;
+        final percent = (completed * 100 / total).round();
         _refreshRecordingViews(() {
-          _transcribingProgress[item.id] =
-              _t('$completed / $total 조각 전사 완료', '$completed / $total chunks transcribed');
+          _transcribingFraction[item.id] = completed / total;
+          _transcribingProgress[item.id] = completed < total
+              ? _t('조각 ${completed + 1}/$total 전사 중 · $percent%',
+                  'Chunk ${completed + 1}/$total · $percent%')
+              : _t('전사 결과를 정리하고 있습니다', 'Finishing up');
         });
       }
 
@@ -950,6 +967,8 @@ class _HomeScreenState extends State<HomeScreen> {
         _refreshRecordingViews(() {
           _transcribing.remove(item.id);
           _transcribingProgress.remove(item.id);
+          _transcribingFraction.remove(item.id);
+          _transcribingStartedAt.remove(item.id);
         });
       }
     }
@@ -4589,7 +4608,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         : const Icon(Icons.auto_awesome_outlined, size: 18),
                     label: Text(
                       busy
-                          ? _transcribingProgress[item.id] ?? '전사 중'
+                          ? _transcribeStatus(item.id)
                           : item.hasTranscript
                               ? _t('다시 전사', 'Transcribe again')
                               : _provider.shortLabel + _t('로 전사', ' transcription'),
@@ -4638,6 +4657,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                 ],
               ),
+              if (busy) ...[
+                const SizedBox(height: 10),
+                // Null (moving bar) until the first chunk reports progress.
+                LinearProgressIndicator(
+                  key: ValueKey('transcribe-progress-${item.id}'),
+                  value: _transcribingFraction[item.id],
+                ),
+              ],
               const SizedBox(height: 20),
               Wrap(
                 spacing: 8,
@@ -6037,10 +6064,21 @@ class _HomeScreenState extends State<HomeScreen> {
     _viewActive = true;
   }
 
+  /// Progress text plus elapsed time, e.g. "조각 2/3 전사 중 · 33% · 1:05".
+  String _transcribeStatus(String id) {
+    final text = _transcribingProgress[id] ?? _t('전사 중', 'Transcribing');
+    final started = _transcribingStartedAt[id];
+    if (started == null) return text;
+    final elapsed = DateTime.now().difference(started);
+    final seconds = (elapsed.inSeconds % 60).toString().padLeft(2, '0');
+    return '$text · ${elapsed.inMinutes}:$seconds';
+  }
+
   @override
   void dispose() {
     if (Platform.isIOS) _audioChannel.setMethodCallHandler(null);
     unawaited(_mcp?.stop());
+    _transcribeTicker?.cancel();
     _recordingTicker?.cancel();
     _positionSubscription?.cancel();
     _durationSubscription?.cancel();
