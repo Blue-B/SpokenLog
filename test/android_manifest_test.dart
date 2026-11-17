@@ -7,6 +7,14 @@ void main() {
     'android/app/src/main/AndroidManifest.xml',
   ).readAsStringSync();
 
+  test('Android declares a Mobile Ads app ID so the SDK does not stop launch', () {
+    expect(
+      manifest,
+      matches(RegExp(
+          r'android:name="com\.google\.android\.gms\.ads\.APPLICATION_ID"\s+android:value="ca-app-pub-\d+~\d+"')),
+    );
+  });
+
   test('Android declares recording and network permissions', () {
     for (final permission in [
       'INTERNET',

@@ -22,6 +22,9 @@ dependencies:
   url_launcher: ^6.3.2
   spokenlog_audio:
     path: packages/spokenlog_audio
+  google_sign_in: ^7.2.0
+  google_mobile_ads: ^9.2.0
+  crypto: ^3.0.8
 
 dev_dependencies:
   flutter_test:

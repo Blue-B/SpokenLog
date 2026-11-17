@@ -16,6 +16,7 @@ class SettingsService {
   static const _appLanguageKey = 'app_language';
   static const _mcpEnabledKey = 'mcp_enabled';
   static const _mcpTokenKey = 'mcp_token';
+  static const _cloudRefreshTokenKey = 'cloud_refresh_token';
 
   static const _groqUsageDateKey = 'groq_usage_date';
   static const _groqUsageSecondsKey = 'groq_usage_seconds';
@@ -40,7 +41,7 @@ class SettingsService {
       _speakerCountKey, _appLanguageKey, _groqUsageDateKey, _groqUsageSecondsKey,
       _groqRemainingRequestsKey, _groqLimitRequestsKey, _groqQuotaUpdatedAtKey,
       _cloudflareUsageDateKey, _cloudflareUsageSecondsKey,
-      _mcpEnabledKey, _mcpTokenKey,
+      _mcpEnabledKey, _mcpTokenKey, _cloudRefreshTokenKey,
     ]) {
       await _storage.delete(key: key);
     }
@@ -77,6 +78,7 @@ class SettingsService {
       TranscriptionProvider.groq => _storage.read(key: _groqApiKey),
       TranscriptionProvider.cloudflare =>
         _storage.read(key: _cloudflareApiToken),
+      TranscriptionProvider.spokenlogCloud ||
       TranscriptionProvider.localSenseVoice ||
       TranscriptionProvider.localWhisper => Future.value(null),
     };
@@ -271,6 +273,13 @@ class SettingsService {
       value: language.storageId,
     );
   }
+
+  /// Desktop Google sign-in for SpokenLog cloud; null deletes it.
+  Future<String?> getCloudRefreshToken() => _storage.read(key: _cloudRefreshTokenKey);
+
+  Future<void> setCloudRefreshToken(String? value) => value == null
+      ? _storage.delete(key: _cloudRefreshTokenKey)
+      : _storage.write(key: _cloudRefreshTokenKey, value: value);
 
   Future<bool> getMcpEnabled() async =>
       (await _storage.read(key: _mcpEnabledKey)) == '1';

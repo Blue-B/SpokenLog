@@ -35,6 +35,11 @@ import '../widgets/cloud_connection_help.dart';
 import '../widgets/drag_selection_list.dart';
 import '../widgets/local_models_dialog.dart';
 import '../widgets/mcp_settings_dialog.dart';
+import '../widgets/cloud_account_panel.dart';
+import '../services/cloud_account_service.dart';
+import '../services/cloud_config.dart';
+import '../services/rewarded_ad_service.dart';
+import '../services/spokenlog_cloud_service.dart';
 import '../services/mcp_server.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../widgets/storage_management_dialog.dart';
@@ -63,6 +68,9 @@ class _HomeScreenState extends State<HomeScreen> {
   final _cloudflare = CloudflareTranscriptionService();
   final _senseVoiceModelManager = SenseVoiceModelManager();
   final _whisperModelManager = WhisperModelManager();
+  final _cloud = SpokenLogCloudService();
+  final _rewardedAds = RewardedAdService();
+  late final _cloudAccount = CloudAccountService(settings: _settings);
   final _speakerDiarizationModelManager =
       SpeakerDiarizationModelManager();
   late final _waveformService = widget.waveformService ?? WavWaveformService();
@@ -156,6 +164,86 @@ class _HomeScreenState extends State<HomeScreen> {
     });
     unawaited(_loadTranscriptionPreference());
     unawaited(_loadUiPreferences());
+  }
+
+  /// SpokenLog cloud is listed only in builds configured for it.
+  Iterable<TranscriptionProvider> get _availableProviders =>
+      TranscriptionProvider.values.where((p) =>
+          p != TranscriptionProvider.spokenlogCloud || CloudConfig.current.isAvailable);
+
+  /// Signs in and makes sure there is cloud time for [item]; offers a
+  /// rewarded ad when short. Returns the ID token, or null to stop.
+  Future<String?> _prepareCloud(RecordingItem item) async {
+    if (!CloudConfig.current.isAvailable) {
+      _message(_t('이 빌드에는 SpokenLog 클라우드가 없습니다. 전사 설정에서 다른 방식을 고르세요.',
+          'SpokenLog cloud is not available in this build. Choose another method.'), error: true);
+      return null;
+    }
+    try {
+      final token = await _cloudAccount.idToken(interactive: true);
+      if (token == null) {
+        _message(_t('Google 로그인이 필요합니다.', 'Google sign-in is required.'), error: true);
+        return null;
+      }
+      var account = await _cloud.account(token);
+      final needed = (item.durationMs / 1000).ceil();
+      while (needed > 0 && account.creditSeconds < needed) {
+        if (!mounted) return null;
+        final canAd = CloudConfig.current.supportsAds && account.canWatchAd;
+        final watch = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(_t('클라우드 시간이 부족합니다', 'Not enough cloud time')),
+            content: Text(_t(
+              '필요 ${(needed / 60).ceil()}분 · 남은 시간 ${account.creditSeconds ~/ 60}분\n'
+                  '${canAd ? '광고를 보면 ${account.adRewardSeconds ~/ 60}분을 받습니다. (오늘 ${account.adsToday}/${account.adsDailyLimit}회)' : '기기 전사는 시간 제한 없이 무료입니다.'}',
+              'Needs ${(needed / 60).ceil()} min · ${account.creditSeconds ~/ 60} min left\n'
+                  '${canAd ? 'Watch an ad for ${account.adRewardSeconds ~/ 60} min (${account.adsToday}/${account.adsDailyLimit} today).' : 'On-device transcription is free and unlimited.'}',
+            )),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(_t('취소', 'Cancel')),
+              ),
+              if (canAd)
+                FilledButton(
+                  onPressed: () => Navigator.pop(context, true),
+                  child: Text(_t('광고 보기', 'Watch ad')),
+                ),
+            ],
+          ),
+        );
+        if (watch != true) return null;
+        account = await _watchAdForCredits() ?? account;
+      }
+      return token;
+    } catch (e) {
+      _message(_t('SpokenLog 클라우드에 연결하지 못했습니다: $e', 'Could not reach SpokenLog cloud: $e'),
+          error: true);
+      return null;
+    }
+  }
+
+  /// Shows a rewarded ad, then waits for the server's AdMob callback to
+  /// add the time. Returns the refreshed account.
+  Future<CloudAccount?> _watchAdForCredits() async {
+    final token = await _cloudAccount.idToken();
+    final userId = _cloudAccount.userId;
+    if (token == null || userId == null) return null;
+    final before = await _cloud.account(token);
+    if (!await _rewardedAds.show(userId: userId)) {
+      _message(_t('광고를 끝까지 보면 시간이 지급됩니다.', 'Watch the whole ad to get the time.'));
+      return before;
+    }
+    // The signed callback reaches our server separately, usually in seconds.
+    for (var i = 0; i < 10; i++) {
+      await Future<void>.delayed(const Duration(milliseconds: 1500));
+      final now = await _cloud.account(token);
+      if (now.creditSeconds > before.creditSeconds) return now;
+    }
+    _message(_t('시간 지급이 늦어지고 있습니다. 잠시 후 다시 확인해 주세요.',
+        'The reward is taking a while. Check again shortly.'));
+    return before;
   }
 
   // Desktop only: phones suspend background apps, so a local server would vanish.
@@ -764,6 +852,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
     String? apiKey;
     String? cloudflareAccountId;
+    String? cloudToken;
+
+    if (provider == TranscriptionProvider.spokenlogCloud) {
+      cloudToken = await _prepareCloud(item);
+      if (cloudToken == null || !mounted) return;
+    }
 
     if (provider.requiresApiKey) {
       apiKey = await _settings.getApiKey(provider);
@@ -828,6 +922,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (RecordingService.canDecodeAudio &&
           item.audioPaths.any((p) => !p.toLowerCase().endsWith('.wav')) &&
           (provider.isLocal ||
+              provider == TranscriptionProvider.spokenlogCloud ||
               await _settings.getSpeakerDiarizationEnabled())) {
         _refreshRecordingViews(() => _transcribingProgress[item.id] =
             _t('WAV로 변환하고 있습니다.', 'Converting to WAV...'));
@@ -842,6 +937,12 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       var result = switch (provider) {
+        TranscriptionProvider.spokenlogCloud => await _cloud.transcribeRecording(
+            recording: item,
+            idToken: cloudToken!,
+            language: language,
+            onProgress: progress,
+          ),
         TranscriptionProvider.groq => await _groq.transcribeRecording(
             recording: item,
             apiKey: apiKey!,
@@ -1158,7 +1259,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           : Icons.cloud_queue_rounded,
                     ),
                   ),
-                  items: TranscriptionProvider.values
+                  items: _availableProviders
                       .map(
                         (entry) => DropdownMenuItem(
                           value: entry,
@@ -1278,6 +1379,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _showEnginePanel() async {
     final installed = <TranscriptionProvider, bool>{
+      // Ready without setup; sign-in happens on first use.
+      TranscriptionProvider.spokenlogCloud: true,
       TranscriptionProvider.localSenseVoice:
           await _senseVoiceModelManager.isInstalled(),
       TranscriptionProvider.localWhisper:
@@ -1318,7 +1421,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
             ),
             const SizedBox(height: 12),
-            ...TranscriptionProvider.values.map((entry) {
+            ..._availableProviders.map((entry) {
               final ready = installed[entry] ?? false;
               final selected = entry == _provider;
               return Card(
@@ -1760,6 +1863,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   );
                   if (!dialogContext.mounted) return;
                   setLocalState(() => whisperInstalled = true);
+                case TranscriptionProvider.spokenlogCloud:
                 case TranscriptionProvider.groq:
                 case TranscriptionProvider.cloudflare:
                   return;
@@ -1793,6 +1897,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 await _whisperModelManager.deleteModel();
                 if (!dialogContext.mounted) return;
                 setLocalState(() => whisperInstalled = false);
+              case TranscriptionProvider.spokenlogCloud:
               case TranscriptionProvider.groq:
               case TranscriptionProvider.cloudflare:
                 return;
@@ -1849,7 +1954,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           void selectProviderMode(bool isLocal) {
-            final candidates = TranscriptionProvider.values
+            final candidates = _availableProviders
                 .where(
                   (value) =>
                       value.isLocal == isLocal &&
@@ -2051,6 +2156,23 @@ class _HomeScreenState extends State<HomeScreen> {
           }
 
           Widget usagePanel() {
+            if (provider == TranscriptionProvider.spokenlogCloud) {
+              return CloudAccountPanel(
+                key: const ValueKey('cloud-account-panel'),
+                useEnglish: _useEnglish,
+                signIn: ({required interactive}) async {
+                  final token = await _cloudAccount.idToken(interactive: interactive);
+                  return token == null ? null : (_cloudAccount.email ?? 'Google');
+                },
+                loadAccount: () async {
+                  final token = await _cloudAccount.idToken();
+                  if (token == null) throw _t('로그인이 만료되었습니다.', 'Sign-in expired.');
+                  return _cloud.account(token);
+                },
+                signOut: _cloudAccount.signOut,
+                watchAd: CloudConfig.current.supportsAds ? _watchAdForCredits : null,
+              );
+            }
             if (!provider.isLocal) {
               return CloudConnectionHelp(
                 cloudflare: provider == TranscriptionProvider.cloudflare,
@@ -2370,7 +2492,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               setLocalState(() {
                                 language = value;
                                 if (!provider.supportsLanguage(language)) {
-                                  final candidates = TranscriptionProvider.values
+                                  final candidates = _availableProviders
                                       .where(
                                         (candidate) =>
                                             candidate.isLocal ==
@@ -2429,16 +2551,23 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                     const SizedBox(height: 8),
-                    ...TranscriptionProvider.values
-                        .where(
-                          (value) => value.isLocal == showLocalProviders,
-                        )
-                        .map(
-                          (value) => Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: providerCard(value),
+                    for (final value in _availableProviders
+                        .where((value) => value.isLocal == showLocalProviders)) ...[
+                      // Own-key engines sit below SpokenLog cloud as an advanced option.
+                      if (value == TranscriptionProvider.groq &&
+                          CloudConfig.current.isAvailable)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(2, 6, 2, 8),
+                          child: Text(
+                            _t('내 API 키로 직접 연결 (고급)', 'Use your own API key (advanced)'),
+                            style: Theme.of(dialogContext).textTheme.labelLarge,
                           ),
                         ),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: providerCard(value),
+                      ),
+                    ],
                     const SizedBox(height: 10),
                     usagePanel(),
                     const SizedBox(height: 12),
@@ -6270,6 +6399,7 @@ class _SttProviderCard extends StatelessWidget {
   final VoidCallback onTap;
 
   IconData get _icon => switch (provider) {
+        TranscriptionProvider.spokenlogCloud => Icons.auto_awesome_rounded,
         TranscriptionProvider.groq => Icons.bolt_rounded,
         TranscriptionProvider.cloudflare => Icons.cloud_outlined,
         TranscriptionProvider.localSenseVoice => Icons.speed_rounded,
