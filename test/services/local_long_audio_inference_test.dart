@@ -1,9 +1,11 @@
 // Opt-in check that runs the real local engines on a long recording.
 //
 // Skipped unless the models and a speech WAV are provided, e.g.:
-//   SPOKENLOG_TEST_MODELS=/path/models \       (tiny/, base/, small/, sv/ with the model files)
+//   SPOKENLOG_TEST_MODELS=/path/models \       (tiny/, base/, small/, turbo/, sv/ with the model files)
 //   SPOKENLOG_TEST_SPEECH=/path/one.wav \      (short speech clip, 16 kHz mono)
 //   SPOKENLOG_TEST_LONG=/path/long.wav \       (that clip repeated, > 60 s)
+//   SPOKENLOG_TEST_KOREAN=/path/ko.wav \       (optional: Korean clip containing
+//       "회의를", "피드백을" and "화면")
 //   LD_LIBRARY_PATH=<sherpa_onnx_linux>/linux/x64 flutter test <this file>
 import 'dart:io';
 
@@ -18,6 +20,7 @@ import 'package:voice_transcriber/services/whisper_transcription_service.dart';
 final _models = Platform.environment['SPOKENLOG_TEST_MODELS'];
 final _speech = Platform.environment['SPOKENLOG_TEST_SPEECH'];
 final _long = Platform.environment['SPOKENLOG_TEST_LONG'];
+final _korean = Platform.environment['SPOKENLOG_TEST_KOREAN'];
 final _skip = (_models == null || _speech == null || _long == null)
     ? 'set SPOKENLOG_TEST_MODELS / _SPEECH / _LONG to run real inference'
     : false;
@@ -62,6 +65,24 @@ int _words(String text) =>
     RegExp(r'\w+').allMatches(text.toLowerCase()).length;
 
 void main() {
+  // sherpa-onnx before 2.0 dropped Korean syllables that span byte-level BPE
+  // tokens ("회의를" came out as "회를") with every Whisper size.
+  test('Whisper keeps every Korean syllable',
+      skip: _models == null || _korean == null
+          ? 'set SPOKENLOG_TEST_MODELS and SPOKENLOG_TEST_KOREAN'
+          : false,
+      timeout: const Timeout(Duration(minutes: 10)), () async {
+    final result = await WhisperTranscriptionService(
+      _FixedWhisper(WhisperModelSize.small, '$_models/small'),
+    ).transcribeRecording(
+      recording: _recording(_korean!),
+      language: TranscriptionLanguage.ko,
+    );
+    for (final word in ['회의를', '피드백을', '화면']) {
+      expect(result.text, contains(word));
+    }
+  });
+
   for (final size in WhisperModelSize.values) {
     test('Whisper ${size.name} transcribes the whole long recording',
         skip: _skip, timeout: const Timeout(Duration(minutes: 10)), () async {

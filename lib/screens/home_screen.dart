@@ -1676,7 +1676,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _t('한국어·영어·중국어·일본어·광둥어 · 약 239MB',
                   'Korean, English, Chinese, Japanese, Cantonese · about 239 MB'),
               sense.isInstalled, sense.download, sense.deleteModel),
-          for (final size in WhisperModelSize.values)
+          for (final size in WhisperModelSize.values.where((s) =>
+              TranscriptionProvider.localWhisper.models.contains(s.modelId)))
             () {
               final whisper = WhisperModelManager(size: size);
               // "Whisper Tiny INT8 · Fastest, ~104 MB": name as the title,

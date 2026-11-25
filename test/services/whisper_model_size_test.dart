@@ -24,6 +24,12 @@ void main() {
     expect(WhisperModelSize.tiny.downloadMegabytes, 104);
     expect(WhisperModelSize.base.downloadMegabytes, 161);
     expect(WhisperModelSize.small.downloadMegabytes, 375);
+    expect(WhisperModelSize.turbo.downloadMegabytes, 1037);
+  });
+
+  test('Turbo downloads from its own repository', () {
+    expect(WhisperModelSize.turbo.repository, 'sherpa-onnx-whisper-turbo');
+    expect(WhisperModelSize.turbo.modelId, 'whisper-turbo-multilingual-int8');
   });
 
   test('each size downloads from its own repository', () {

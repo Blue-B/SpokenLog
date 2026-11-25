@@ -16,7 +16,7 @@ dependencies:
   flutter_foreground_task: ^11.0.3
   http: ^1.6.0
   audioplayers: ^6.8.1
-  sherpa_onnx: ^1.13.8
+  sherpa_onnx: ^2.0.3
   file_picker: ^13.1.0
   desktop_drop: ^0.8.4
   url_launcher: ^6.3.2

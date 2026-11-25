@@ -1,4 +1,11 @@
+import 'dart:io';
+
 import 'transcription_language.dart';
+
+/// Large Whisper models need a PC's memory and CPU; phones do not list them.
+const desktopWhisperModels = ['whisper-turbo-multilingual-int8'];
+
+bool get _isDesktop => Platform.isWindows || Platform.isMacOS || Platform.isLinux;
 
 enum TranscriptionProvider {
   /// Our server picks the backend; credits come from ads. No user key.
@@ -65,7 +72,7 @@ enum TranscriptionProvider {
         TranscriptionProvider.localSenseVoice =>
           '지원 언어가 5개로 제한되고 Whisper Large V3보다 정확도가 낮을 수 있습니다. 모델은 약 239MB입니다.',
         TranscriptionProvider.localWhisper =>
-          'Tiny 약 104MB, Base 약 161MB, Small 약 375MB이며 클수록 정확하지만 느립니다. 그래도 Large 계열보다 정확도가 낮고 SenseVoice보다 느릴 수 있습니다. 광둥어(yue)는 Whisper 다국어 토큰에 없어 자동 감지나 SenseVoice를 사용해야 합니다.',
+          'Tiny 약 104MB, Base 약 161MB, Small 약 375MB이며 클수록 정확하지만 느립니다. PC에서는 Turbo(약 1.04GB)도 쓸 수 있고, Small과 비슷한 속도로 가장 정확합니다. 광둥어(yue)는 Whisper 다국어 토큰에 없어 자동 감지나 SenseVoice를 사용해야 합니다.',
       };
 
   String get quotaLabel => switch (this) {
@@ -125,10 +132,11 @@ enum TranscriptionProvider {
         TranscriptionProvider.localSenseVoice => const [
             'sensevoice-small-int8',
           ],
-        TranscriptionProvider.localWhisper => const [
+        TranscriptionProvider.localWhisper => [
             'whisper-tiny-multilingual-int8',
             'whisper-base-multilingual-int8',
             'whisper-small-multilingual-int8',
+            if (_isDesktop) ...desktopWhisperModels,
           ],
       };
 
@@ -142,7 +150,8 @@ enum TranscriptionProvider {
         'sensevoice-small-int8' => 'SenseVoiceSmall INT8 · East Asian languages',
         'whisper-tiny-multilingual-int8' => 'Whisper Tiny INT8 · Fastest, ~104 MB',
         'whisper-base-multilingual-int8' => 'Whisper Base INT8 · Balanced, ~161 MB',
-        'whisper-small-multilingual-int8' => 'Whisper Small INT8 · Most accurate, ~375 MB',
+        'whisper-small-multilingual-int8' => 'Whisper Small INT8 · More accurate, ~375 MB',
+        'whisper-turbo-multilingual-int8' => 'Whisper Turbo INT8 · PC, most accurate, ~1.04 GB',
         _ => model,
       };
     }
@@ -155,7 +164,8 @@ enum TranscriptionProvider {
       'sensevoice-small-int8' => 'SenseVoiceSmall INT8 · 동아시아 균형형',
       'whisper-tiny-multilingual-int8' => 'Whisper Tiny INT8 · 가장 빠름, 약 104MB',
       'whisper-base-multilingual-int8' => 'Whisper Base INT8 · 균형형, 약 161MB',
-      'whisper-small-multilingual-int8' => 'Whisper Small INT8 · 가장 정확함, 약 375MB',
+      'whisper-small-multilingual-int8' => 'Whisper Small INT8 · 더 정확함, 약 375MB',
+      'whisper-turbo-multilingual-int8' => 'Whisper Turbo INT8 · PC용, 가장 정확함, 약 1.04GB',
       _ => model,
     };
   }
@@ -181,7 +191,7 @@ enum TranscriptionProvider {
     TranscriptionProvider.groq => 'Requires an API key and is subject to quotas. Audio is sent to Groq.',
     TranscriptionProvider.cloudflare => 'Requires an Account ID and API token. The free quota is shared across Workers AI.',
     TranscriptionProvider.localSenseVoice => 'Limited to five languages; may be less accurate than Whisper Large V3. About 239 MB.',
-    TranscriptionProvider.localWhisper => 'Tiny about 104 MB, Base about 161 MB, Small about 375 MB. Larger is more accurate but slower, and still less accurate than Large models. For Cantonese, use Auto or SenseVoice.',
+    TranscriptionProvider.localWhisper => 'Tiny about 104 MB, Base about 161 MB, Small about 375 MB; larger is more accurate but slower. On a PC, Turbo (about 1.04 GB) is also available: about as fast as Small and the most accurate. For Cantonese, use Auto or SenseVoice.',
   };
 
   String quotaLabelFor(bool english) => !english ? quotaLabel : switch (this) {

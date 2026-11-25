@@ -50,6 +50,8 @@ void main() {
         'whisper-tiny-multilingual-int8',
         'whisper-base-multilingual-int8',
         'whisper-small-multilingual-int8',
+        // Tests run on a desktop OS, where the large models are offered.
+        'whisper-turbo-multilingual-int8',
       ],
     );
   });

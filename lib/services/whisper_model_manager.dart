@@ -23,7 +23,11 @@ class WhisperModelPaths {
 enum WhisperModelSize {
   tiny('tiny', 12937772, 89855401),
   base('base', 29120534, 130672026),
-  small('small', 112442483, 262226114);
+  small('small', 112442483, 262226114),
+  // PC only (see desktopWhisperModels): too large for phone memory. Large V3
+  // was left out: on a 30 s Korean clip it took 5x as long as Turbo and was
+  // no more accurate.
+  turbo('turbo', 674716297, 361080764);
 
   const WhisperModelSize(this.prefix, this.encoderBytes, this.decoderBytes);
 
