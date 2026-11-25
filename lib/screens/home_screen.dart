@@ -3257,11 +3257,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Opens the system share sheet with the transcript text, so it can go
   /// straight into ChatGPT, KakaoTalk, notes and so on.
-  Future<void> _shareTranscript(RecordingItem item, BuildContext buttonContext) async {
+  /// [withTimes] adds "[mm:ss]" before each line, like the TXT export.
+  Future<void> _shareTranscript(
+    RecordingItem item,
+    BuildContext buttonContext, {
+    required bool withTimes,
+  }) async {
     final box = buttonContext.findRenderObject() as RenderBox?;
     try {
       await SharePlus.instance.share(ShareParams(
-        text: item.transcript!.trim(),
+        text: withTimes
+            ? _transcriptExport.buildText(item, TranscriptExportFormat.txt)
+            : item.transcript!.trim(),
         subject: _title(item),
         // iPad and macOS anchor the share popover to the button.
         sharePositionOrigin:
@@ -4791,10 +4798,38 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   if (item.hasTranscript && !Platform.isWindows)
                     Builder(
-                      builder: (buttonContext) => OutlinedButton.icon(
-                        onPressed: () => unawaited(_shareTranscript(item, buttonContext)),
-                        icon: const Icon(Icons.share_outlined, size: 17),
-                        label: Text(_t('공유', 'Share')),
+                      builder: (buttonContext) => PopupMenuButton<bool>(
+                        tooltip: _t('전사문 공유', 'Share transcript'),
+                        onSelected: (withTimes) => unawaited(
+                            _shareTranscript(item, buttonContext, withTimes: withTimes)),
+                        itemBuilder: (_) => [
+                          PopupMenuItem(
+                            value: false,
+                            child: Text(_t('텍스트만', 'Text only')),
+                          ),
+                          PopupMenuItem(
+                            value: true,
+                            child: Text(_t('시간 포함', 'With timestamps')),
+                          ),
+                        ],
+                        child: Container(
+                          height: 40,
+                          padding: const EdgeInsets.symmetric(horizontal: 13),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: scheme.outline),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.share_outlined, size: 17),
+                              const SizedBox(width: 7),
+                              Text(_t('공유', 'Share')),
+                              const SizedBox(width: 2),
+                              const Icon(Icons.arrow_drop_down_rounded, size: 18),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                   if (item.hasTranscript) exportButton(),
