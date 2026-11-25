@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="470" viewBox="0 0 920 470" font-family="-apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <title>Which transcription engine to use on each platform</title>
+  <rect width="920" height="470" rx="18" fill="#FBF7F4"/>
+
+  <text x="32" y="44" font-size="21" font-weight="700" fill="#2B2420">Which engine on which device</text>
+  <text x="32" y="68" font-size="13.5" fill="#6E625B">On-device models are downloaded in Settings &gt; Local models. Cloud engines use your own API key.</text>
+
+  <!-- platform headers -->
+  <g font-size="14.5" font-weight="700" fill="#2B2420" text-anchor="middle">
+    <text x="452" y="110">Android</text>
+    <text x="574" y="110">iPhone</text>
+    <text x="696" y="110">Windows</text>
+    <text x="818" y="110">macOS</text>
+  </g>
+  <g font-size="11.5" fill="#8A7D75" text-anchor="middle">
+    <text x="452" y="127">phone</text>
+    <text x="574" y="127">phone</text>
+    <text x="696" y="127">PC</text>
+    <text x="818" y="127">PC</text>
+  </g>
+
+  <!-- rows -->
+  <g font-size="14.5" fill="#2B2420">
+    <rect x="24" y="140" width="872" height="48" rx="10" fill="#FFFFFF"/>
+    <text x="40" y="162" font-weight="700">SenseVoice Small</text>
+    <text x="40" y="179" font-size="12" fill="#6E625B">239 MB · fastest · Korean, English, Chinese, Japanese, Cantonese</text>
+
+    <text x="40" y="214" font-weight="700">Whisper Tiny / Base</text>
+    <text x="40" y="231" font-size="12" fill="#6E625B">104 / 161 MB · many languages · lower accuracy</text>
+
+    <rect x="24" y="244" width="872" height="48" rx="10" fill="#FFFFFF"/>
+    <text x="40" y="266" font-weight="700">Whisper Small</text>
+    <text x="40" y="283" font-size="12" fill="#6E625B">375 MB · many languages · slower on phones</text>
+
+    <text x="40" y="318" font-weight="700">Whisper Turbo</text>
+    <text x="40" y="335" font-size="12" fill="#6E625B">1.04 GB · most accurate on-device · PCs only</text>
+
+    <rect x="24" y="348" width="872" height="48" rx="10" fill="#FFFFFF"/>
+    <text x="40" y="370" font-weight="700">Cloud: Groq or Cloudflare</text>
+    <text x="40" y="387" font-size="12" fill="#6E625B">Whisper Large V3 · needs internet and your key · audio leaves the device</text>
+  </g>
+
+  <!-- marks: best = filled orange pill, ok = outlined check, none = dash -->
+  <defs>
+    <g id="best"><rect x="-44" y="-13" width="88" height="26" rx="13" fill="#EE6C2B"/><text y="5" font-size="12.5" font-weight="700" fill="#FFFFFF" text-anchor="middle">Best</text></g>
+    <g id="ok"><circle r="11" fill="none" stroke="#C9BBB2" stroke-width="1.6"/><path d="M-5 0.5 L-1.5 4 L5.5 -3.5" fill="none" stroke="#8A7D75" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g>
+    <g id="none"><line x1="-8" x2="8" stroke="#D8CCC4" stroke-width="2.2" stroke-linecap="round"/></g>
+  </defs>
+
+  <!-- SenseVoice -->
+  <use href="#best" x="452" y="164"/><use href="#best" x="574" y="164"/>
+  <use href="#ok" x="696" y="164"/><use href="#ok" x="818" y="164"/>
+  <!-- Tiny / Base -->
+  <use href="#ok" x="452" y="216"/><use href="#ok" x="574" y="216"/>
+  <use href="#ok" x="696" y="216"/><use href="#ok" x="818" y="216"/>
+  <!-- Small -->
+  <use href="#ok" x="452" y="268"/><use href="#ok" x="574" y="268"/>
+  <use href="#ok" x="696" y="268"/><use href="#ok" x="818" y="268"/>
+  <!-- Turbo -->
+  <use href="#none" x="452" y="320"/><use href="#none" x="574" y="320"/>
+  <use href="#best" x="696" y="320"/><use href="#best" x="818" y="320"/>
+  <!-- Cloud -->
+  <use href="#ok" x="452" y="372"/><use href="#ok" x="574" y="372"/>
+  <use href="#ok" x="696" y="372"/><use href="#ok" x="818" y="372"/>
+
+  <!-- legend -->
+  <g font-size="12.5" fill="#6E625B">
+    <use href="#best" x="76" y="432"/><text x="130" y="436">recommended</text>
+    <use href="#ok" x="248" y="432"/><text x="267" y="436">available</text>
+    <use href="#none" x="352" y="432"/><text x="369" y="436">not offered</text>
+    <text x="896" y="436" text-anchor="end">iPhone and macOS downloads are still 0.1.3 until their next build.</text>
+  </g>
+</svg>

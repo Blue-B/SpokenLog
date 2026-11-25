@@ -22,12 +22,31 @@ These are direct-download builds, not App Store or Google Play releases. Follow 
 ## Features
 
 - Recording library with search, collections, favorites and timestamped playback.
-- Local SenseVoice or Whisper (Tiny, Base or Small); cloud transcription with your own Groq or Cloudflare credentials.
+- Local SenseVoice or Whisper (Tiny, Base, Small, and Turbo on PCs); cloud transcription with your own Groq or Cloudflare credentials.
 - Transcript editing, local speaker labels, and TXT, SRT, VTT or JSON export.
 - Imports M4A, MP3, FLAC, OGG, MP4 and other audio or video files, converting them to WAV for local transcription. On Android the picker opens in the Samsung Voice Recorder folder; on iPhone, share a recording from Voice Memos to SpokenLog.
 - Read-only AI connection (MCP) on Windows and macOS: let Claude Code, Codex, pi, Claude or ChatGPT search your transcripts.
 
 Local transcription keeps audio on your device. Cloud transcription uploads audio to the selected provider. The interface supports English and Korean; spoken-language support depends on the engine.
+
+## Choosing a transcription engine
+
+![Which engine to use on Android, iPhone, Windows and macOS](docs/images/models-by-platform.svg)
+
+- **Phones:** SenseVoice. It is the fastest and handles Korean well; it does not add punctuation.
+- **PCs:** Whisper Turbo. In our test it was as fast as Whisper Small and the most accurate.
+- **Cloud** (Groq, Cloudflare) is faster still, but the audio is uploaded to that provider.
+
+One 30-second Korean clip on a 10-core PC:
+
+| Engine | Time | Result |
+| --- | --- | --- |
+| SenseVoice | 3 s | No punctuation; 2 words wrong |
+| Whisper Small | 17 s | 2 words wrong |
+| Whisper Turbo | 17 s | Exact |
+| Whisper Large V3 (not offered) | 92 s | 2 words wrong |
+
+This is a single synthetic-voice sample, not a benchmark; real recordings vary. On phones, expect several times longer.
 
 ## AI connection (MCP)
 
