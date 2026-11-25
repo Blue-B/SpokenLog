@@ -80,10 +80,10 @@ void main() {
         'Download/회의.txt');
     expect(android('/document/msf:42'), 'Download/회의.txt');
     expect(android('/document/1234'), 'Download/회의.txt');
+    final desktop = Uri.file('/home/me/note.txt');
     expect(
-      TranscriptExportService.readableLocation(
-          Uri.file('/home/me/note.txt'), 'note.txt'),
-      '/home/me/note.txt',
+      TranscriptExportService.readableLocation(desktop, 'note.txt'),
+      desktop.toFilePath(), // backslashes on Windows
     );
   });
 }
