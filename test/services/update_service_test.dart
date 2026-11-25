@@ -89,7 +89,7 @@ void main() {
 
     test('rejects and deletes a package whose checksum differs', () async {
       await expectLater(service(body, '0' * 64).download(update), throwsStateError);
-      expect(File('${temp.path}/updates/SpokenLog-Android.apk').existsSync(), isFalse);
+      expect(File('${temp.path}/spokenlog_updates/SpokenLog-Android.apk').existsSync(), isFalse);
     });
 
     test('reuses a verified package instead of downloading it again', () async {

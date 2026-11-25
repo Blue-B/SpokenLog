@@ -61,8 +61,21 @@ class UpdateService {
         .get(latestRelease, headers: {'Accept': 'application/vnd.github+json'})
         .timeout(const Duration(seconds: 15));
     if (response.statusCode != 200) return null;
-    return parseRelease(jsonDecode(response.body), currentVersion, asset);
+    final update = parseRelease(jsonDecode(response.body), currentVersion, asset);
+    if (update == null) {
+      // Up to date: the package from the last update is no longer needed.
+      try {
+        final dir = await _updatesDir();
+        if (await dir.exists()) await dir.delete(recursive: true);
+      } catch (_) {}
+    }
+    return update;
   }
+
+  /// Our own folder: on Windows the temporary directory is the shared %TEMP%.
+  /// Must match packages/spokenlog_audio/.../res/xml/spokenlog_update_paths.xml.
+  static Future<Directory> _updatesDir() async => Directory(
+      '${(await getTemporaryDirectory()).path}${Platform.pathSeparator}spokenlog_updates');
 
   static AvailableUpdate? parseRelease(Object? json, String currentVersion, String asset) {
     if (json is! Map || json['draft'] == true || json['prerelease'] == true) return null;
@@ -112,7 +125,7 @@ class UpdateService {
     final expected = sums.statusCode == 200 ? expectedHash(sums.body, update.assetName) : null;
     if (expected == null) throw StateError('No checksum for ${update.assetName}');
 
-    final dir = Directory('${(await getTemporaryDirectory()).path}${Platform.pathSeparator}updates');
+    final dir = await _updatesDir();
     final file = File('${dir.path}${Platform.pathSeparator}${update.assetName}');
     // A package verified earlier (the install screen was cancelled) is reused.
     if (await file.exists() && (await sha256.bind(file.openRead()).first).toString() == expected) {
@@ -122,7 +135,9 @@ class UpdateService {
     if (await dir.exists()) await dir.delete(recursive: true);
     await dir.create(recursive: true);
 
-    final response = await _client.send(http.Request('GET', update.downloadUrl));
+    final response = await _client
+        .send(http.Request('GET', update.downloadUrl))
+        .timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) {
       throw HttpException('Download failed (HTTP ${response.statusCode})');
     }

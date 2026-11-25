@@ -261,7 +261,9 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       return;
     }
-    if (update == null || !mounted) return;
+    // Never interrupt a recording or transcription; the next launch asks again.
+    bool busy() => _isRecording || _startingRecording || _transcribingProgress.isNotEmpty;
+    if (update == null || !mounted || busy()) return;
     final megabytes = (update.sizeBytes / (1024 * 1024)).round();
     final version = update.version;
     final accepted = await showDialog<bool>(
@@ -284,36 +286,51 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
     );
-    if (accepted != true || !mounted) return;
+    if (accepted != true || !mounted || busy()) return;
 
     final progress = ValueNotifier<double>(0);
-    final navigator = Navigator.of(context);
+    BuildContext? progressContext;
+    // Removes exactly the progress dialog, even if something opened above it.
+    void closeProgress() {
+      final dialog = progressContext;
+      progressContext = null;
+      final route = dialog != null && dialog.mounted ? ModalRoute.of(dialog) : null;
+      if (route != null && route.isActive) Navigator.of(dialog!).removeRoute(route);
+    }
+
     unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => AlertDialog(
-        title: Text(_t('업데이트 내려받는 중', 'Downloading update')),
-        content: ValueListenableBuilder<double>(
-          valueListenable: progress,
-          builder: (_, value, _) => Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              LinearProgressIndicator(value: value),
-              const SizedBox(height: 10),
-              Text('${(value * 100).round()}%'),
-            ],
+      builder: (dialogContext) {
+        progressContext = dialogContext;
+        return PopScope(
+          canPop: false, // Android back would otherwise leave the download running unseen
+          child: AlertDialog(
+            title: Text(_t('업데이트 내려받는 중', 'Downloading update')),
+            content: ValueListenableBuilder<double>(
+              valueListenable: progress,
+              builder: (_, value, _) => Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  LinearProgressIndicator(value: value),
+                  const SizedBox(height: 10),
+                  Text('${(value * 100).round()}%'),
+                ],
+              ),
+            ),
           ),
-        ),
-      ),
+        );
+      },
     ));
     try {
       final package = await _updates.download(update, onProgress: (v) => progress.value = v);
-      navigator.pop();
+      closeProgress();
+      if (busy()) return; // a recording started meanwhile; the file is kept for next time
       await _updates.install(package);
       // The Windows installer replaces the running files and starts the new version.
       if (Platform.isWindows) exit(0);
     } catch (e) {
-      navigator.pop();
+      closeProgress();
       _message(_t('업데이트하지 못했습니다: $e', 'Could not update: $e'), error: true);
     } finally {
       progress.dispose();
@@ -5226,8 +5243,15 @@ class _HomeScreenState extends State<HomeScreen> {
             if (latest.first.isDeleted != item.isDeleted) {
               if (!closing) {
                 closing = true;
+                final trashed = latest.first.isDeleted;
                 WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                  // removeRoute, not pop: a dialog may be open above the sheet.
+                  final route = sheetContext.mounted ? ModalRoute.of(sheetContext) : null;
+                  if (route != null && route.isActive) Navigator.of(sheetContext).removeRoute(route);
+                  // The confirmation went to the sheet's own message area; repeat it here.
+                  WidgetsBinding.instance.addPostFrameCallback((_) => _message(trashed
+                      ? _t('휴지통으로 이동했습니다.', 'Moved to Trash.')
+                      : _t('기록을 복원했습니다.', 'Recording restored.')));
                 });
               }
               return const SizedBox.shrink();
