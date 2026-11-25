@@ -54,6 +54,7 @@ app.*.map.json
 /android/*
 !/android/app/
 /android/app/*
+!/android/app/proguard-rules.pro
 !/android/app/src/
 /android/app/src/*
 !/android/app/src/main/
