@@ -24,6 +24,9 @@ IOS_DOCUMENT_TYPES = [{
     "LSHandlerRank": "Alternate",
     "LSItemContentTypes": ["public.audio", "public.movie"],
 }]
+# The Mobile Ads SDK is linked on iOS (google_mobile_ads); like Android it needs
+# an AdMob app ID in the app. Google's sample ID until store builds replace it.
+IOS_ADMOB_APP_ID = "ca-app-pub-3940256099942544~1458002511"
 # Keep the existing direct-download app's Documents/Support and login Keychain.
 # Enabling App Sandbox here would silently switch existing users to a container.
 MACOS_ENTITLEMENTS = {
@@ -77,7 +80,8 @@ def prepare() -> None:
                        "NSMicrophoneUsageDescription": microphone,
                        "UIBackgroundModes": modes,
                        "CFBundleDocumentTypes": IOS_DOCUMENT_TYPES,
-                       "LSSupportsOpeningDocumentsInPlace": False})
+                       "LSSupportsOpeningDocumentsInPlace": False,
+                       "GADApplicationIdentifier": IOS_ADMOB_APP_ID})
     print("Apple app identity, microphone, background recording and audio "
           "sharing configured.")
 
@@ -113,6 +117,8 @@ def verify_packages() -> None:
             raise ValueError("Missing recording permissions")
         if info.get("CFBundleDocumentTypes") != IOS_DOCUMENT_TYPES:
             raise ValueError("Missing audio share-sheet registration")
+        if info.get("GADApplicationIdentifier") != IOS_ADMOB_APP_ID:
+            raise ValueError("Missing Mobile Ads app ID")
         if len(archive.read("Payload/Runner.app/Runner")) < 1024:
             raise ValueError("Missing compiled iOS executable")
     with zipfile.ZipFile(mac_zip) as archive:

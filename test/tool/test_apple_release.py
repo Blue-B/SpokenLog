@@ -50,6 +50,8 @@ class AppleReleaseTest(unittest.TestCase):
             self.assertEqual(ios_info["CFBundleDocumentTypes"],
                              release.IOS_DOCUMENT_TYPES)
             self.assertIs(ios_info["LSSupportsOpeningDocumentsInPlace"], False)
+            self.assertEqual(ios_info["GADApplicationIdentifier"],
+                             release.IOS_ADMOB_APP_ID)
             self.assertNotIn("CFBundleDocumentTypes", mac_info)
             for name in ("Release.entitlements", "DebugProfile.entitlements"):
                 actual = plistlib.loads((root / "macos/Runner" / name).read_bytes())
