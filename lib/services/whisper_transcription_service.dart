@@ -79,7 +79,10 @@ class WhisperTranscriptionService {
       tokensPath: paths.tokens,
       language: language.cloudCode ?? '',
       audioPaths: recording.audioPaths,
-      numThreads: Platform.numberOfProcessors.clamp(1, 4).toInt(),
+      // Phones: about four fast cores. PCs: 8 threads made Turbo ~28% faster than 4.
+      numThreads: Platform.numberOfProcessors
+          .clamp(1, Platform.isAndroid || Platform.isIOS ? 4 : 8)
+          .toInt(),
     );
 
     try {

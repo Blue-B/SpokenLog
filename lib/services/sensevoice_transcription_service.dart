@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
 
 import '../models/recording_item.dart';
@@ -76,7 +77,10 @@ class SenseVoiceTranscriptionService {
       tokensPath: paths.tokens,
       audioPaths: recording.audioPaths,
       language: language.senseVoiceCode,
-      numThreads: Platform.numberOfProcessors.clamp(1, 4).toInt(),
+      // Phones: about four fast cores. PCs: 8 threads made Turbo ~28% faster than 4.
+      numThreads: Platform.numberOfProcessors
+          .clamp(1, Platform.isAndroid || Platform.isIOS ? 4 : 8)
+          .toInt(),
     );
 
     try {
@@ -209,7 +213,7 @@ List<Map<String, dynamic>> _decodeSenseVoiceBatch(
 
           texts.add(_cleanSenseVoiceText(result.text));
           segments.addAll(
-            _buildTimestampSegments(
+            buildSenseVoiceSegments(
               tokens: List<String>.from(result.tokens),
               timestamps:
                   result.timestamps.map((value) => value.toDouble()).toList(),
@@ -239,7 +243,8 @@ List<Map<String, dynamic>> _decodeSenseVoiceBatch(
   return outputs;
 }
 
-List<Map<String, dynamic>> _buildTimestampSegments({
+@visibleForTesting
+List<Map<String, dynamic>> buildSenseVoiceSegments({
   required List<String> tokens,
   required List<double> timestamps,
   required double durationSeconds,
@@ -287,7 +292,10 @@ List<Map<String, dynamic>> _buildTimestampSegments({
 
     final hasLargeGap =
         previousTimestamp >= 0 && start - previousTimestamp > 1.4;
-    final tooLong = segmentStart != null && start - segmentStart! >= 6.0;
+    // Cut long lines only where a word starts ("▁" token), so Korean words
+    // are not split across subtitles; text without spaces still cuts at 10 s.
+    final elapsed = segmentStart == null ? 0.0 : start - segmentStart!;
+    final tooLong = (token.startsWith(' ') && elapsed >= 6.0) || elapsed >= 10.0;
 
     if ((hasLargeGap || tooLong) && buffer.isNotEmpty) {
       flush();
