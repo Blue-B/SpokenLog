@@ -118,8 +118,10 @@ class _LocalModelsDialogState extends State<LocalModelsDialog> {
                           ?.copyWith(color: scheme.error)),
                 ],
                 const SizedBox(height: 8),
-                for (final model in widget.models)
+                for (final (index, model) in widget.models.indexed) ...[
+                  if (index > 0) const Divider(height: 1),
                   _row(context, model, busy),
+                ],
               ],
             ),
           ),
@@ -137,36 +139,67 @@ class _LocalModelsDialogState extends State<LocalModelsDialog> {
   Widget _row(BuildContext context, LocalModelEntry model, bool busy) {
     final installed = _installed[model.id];
     final working = _busyId == model.id;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    const indent = 30.0; // icon width + gap, so text lines up under the title
 
-    return Column(
+    // Stacked (title, description, then the button) so a narrow phone dialog
+    // does not squeeze the description into a tall column beside the button.
+    return Padding(
       key: ValueKey('local-model-${model.id}'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ListTile(
-          contentPadding: EdgeInsets.zero,
-          leading: Icon(installed == true
-              ? Icons.check_circle_outline_rounded
-              : Icons.download_for_offline_outlined),
-          title: Text(model.title),
-          subtitle: Text(installed == true
-              ? _t('설치됨 · ${model.subtitle}', 'Installed · ${model.subtitle}')
-              : model.subtitle),
-          trailing: installed == null
-              ? null
-              : installed
-                  ? OutlinedButton(
-                      onPressed:
-                          busy ? null : () => _run(model, install: false),
-                      child: Text(_t('삭제', 'Remove')),
-                    )
-                  : FilledButton(
-                      onPressed:
-                          busy ? null : () => _run(model, install: true),
-                      child: Text(_t('다운로드', 'Download')),
-                    ),
-        ),
-        if (working) LinearProgressIndicator(value: _progress),
-      ],
+      padding: const EdgeInsets.symmetric(vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Icon(
+                installed == true
+                    ? Icons.check_circle_outline_rounded
+                    : Icons.download_for_offline_outlined,
+                size: 20,
+                color: installed == true ? scheme.primary : scheme.onSurfaceVariant,
+              ),
+              const SizedBox(width: indent - 20),
+              Expanded(
+                child: Text(model.title,
+                    style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Padding(
+            padding: const EdgeInsets.only(left: indent),
+            child: Text(model.subtitle,
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant)),
+          ),
+          if (installed != null) ...[
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                const SizedBox(width: indent),
+                if (installed)
+                  Text(_t('설치됨', 'Installed'),
+                      style: theme.textTheme.labelMedium?.copyWith(color: scheme.primary)),
+                const Spacer(),
+                installed
+                    ? OutlinedButton(
+                        onPressed: busy ? null : () => _run(model, install: false),
+                        child: Text(_t('삭제', 'Remove')),
+                      )
+                    : FilledButton(
+                        onPressed: busy ? null : () => _run(model, install: true),
+                        child: Text(_t('다운로드', 'Download')),
+                      ),
+              ],
+            ),
+          ],
+          if (working) ...[
+            const SizedBox(height: 8),
+            LinearProgressIndicator(value: _progress),
+          ],
+        ],
+      ),
     );
   }
 }

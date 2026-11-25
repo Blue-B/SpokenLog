@@ -1679,10 +1679,15 @@ class _HomeScreenState extends State<HomeScreen> {
           for (final size in WhisperModelSize.values)
             () {
               final whisper = WhisperModelManager(size: size);
-              return entry(size.modelId,
-                  TranscriptionProvider.localWhisper
-                      .modelLabel(size.modelId, useEnglish: _useEnglish),
-                  _t('여러 언어 범용 전사', 'General multilingual transcription'),
+              // "Whisper Tiny INT8 · Fastest, ~104 MB": name as the title,
+              // speed and size with the description, like SenseVoice.
+              final label = TranscriptionProvider.localWhisper
+                  .modelLabel(size.modelId, useEnglish: _useEnglish);
+              final split = label.indexOf(' · ');
+              final name = split < 0 ? label : label.substring(0, split);
+              final detail = split < 0 ? '' : '${label.substring(split + 3)} · ';
+              return entry(size.modelId, name,
+                  '$detail${_t('여러 언어 범용 전사', 'General multilingual transcription')}',
                   whisper.isInstalled, whisper.download, whisper.deleteModel);
             }(),
           entry('speaker_diarization', _t('화자 구분', 'Speaker separation'),
