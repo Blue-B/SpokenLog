@@ -5198,6 +5198,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _showRecordingDetails(RecordingItem item) async {
     setState(() => _selectedRecordingId = item.id);
+    var closing = false;
 
     await showModalBottomSheet<void>(
       context: context,
@@ -5219,6 +5220,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 padding: const EdgeInsets.all(24),
                 child: Text(_t('이 녹음은 삭제되었습니다.', 'This recording was deleted.')),
               );
+            }
+            // Moved to Trash (or restored) from this sheet: it now belongs to
+            // another list, so close instead of showing it here.
+            if (latest.first.isDeleted != item.isDeleted) {
+              if (!closing) {
+                closing = true;
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (sheetContext.mounted) Navigator.of(sheetContext).pop();
+                });
+              }
+              return const SizedBox.shrink();
             }
             return _buildRecordingCard(latest.first);
           },

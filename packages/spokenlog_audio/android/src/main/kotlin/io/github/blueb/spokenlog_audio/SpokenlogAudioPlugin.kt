@@ -171,7 +171,12 @@ class SpokenlogAudioPlugin :
                     }
                 val paths =
                     uris.mapIndexed { index, uri ->
-                        val target = File(File(dir, index.toString()).apply { mkdirs() }, displayName(activity, uri))
+                        val folder = File(dir, index.toString()).apply { mkdirs() }
+                        val target = File(folder, safeFileName(displayName(activity, uri)))
+                        // The name comes from another app's provider: never write outside the folder.
+                        if (target.canonicalFile.parentFile != folder.canonicalFile) {
+                            throw SecurityException("Refused file name outside the import folder")
+                        }
                         activity.contentResolver.openInputStream(uri)!!.use { input ->
                             target.outputStream().use { input.copyTo(it) }
                         }
@@ -188,10 +193,16 @@ class SpokenlogAudioPlugin :
     private fun displayName(
         activity: Activity,
         uri: Uri,
-    ): String =
+    ): String? =
         activity.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) it.getString(0) else null
-        } ?: uri.lastPathSegment?.substringAfterLast('/') ?: "audio"
+        } ?: uri.lastPathSegment
+
+    /** Last path part of a provider-supplied name, e.g. "../../x.wav" -> "x.wav". */
+    private fun safeFileName(name: String?): String {
+        val base = name.orEmpty().substringAfterLast('/').substringAfterLast('\\').replace("\u0000", "").trim()
+        return if (base.isEmpty() || base == "." || base == "..") "audio" else base
+    }
 
     /** Decodes the first audio track of [source] to 16 kHz mono PCM16 WAV, the format local engines read. */
     private fun decodeToWav(
