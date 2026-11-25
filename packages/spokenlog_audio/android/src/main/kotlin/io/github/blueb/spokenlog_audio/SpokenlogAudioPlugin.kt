@@ -6,6 +6,7 @@ import android.media.AudioFormat
 import android.media.MediaCodec
 import android.media.MediaExtractor
 import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.os.Handler
@@ -78,6 +79,21 @@ class SpokenlogAudioPlugin :
 
             "pickAudio" -> {
                 pickAudio(result)
+            }
+
+            // Length of a file kept in its original format (m4a, mp3, ...); 0 if unknown.
+            "durationMs" -> {
+                val retriever = MediaMetadataRetriever()
+                val ms =
+                    try {
+                        retriever.setDataSource(call.argument<String>("path")!!)
+                        retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                    } catch (e: Exception) {
+                        0L
+                    } finally {
+                        retriever.release()
+                    }
+                result.success(ms)
             }
 
             else -> {

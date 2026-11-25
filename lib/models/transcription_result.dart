@@ -118,6 +118,20 @@ class TranscriptionResult {
     );
   }
 
+  /// Whisper often answers silence and noise with segments that are only
+  /// "." or "..."; joined, they show as ". . . ." before the speech.
+  TranscriptionResult withoutPunctuationOnlySegments() {
+    final speech = RegExp(r'[\p{L}\p{N}]', unicode: true);
+    final kept = segments.where((s) => speech.hasMatch(s.text)).toList();
+    if (kept.length == segments.length || kept.isEmpty) return this;
+    return TranscriptionResult(
+      text: kept.map((s) => s.text.trim()).join(' '),
+      segments: kept,
+      durationSeconds: durationSeconds,
+      speakerLabels: speakerLabels,
+    );
+  }
+
   TranscriptionResult withSpeakerLabels(Map<int, String> value) {
     return TranscriptionResult(
       text: text,

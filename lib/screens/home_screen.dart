@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../models/recording_collection.dart';
 import '../models/recording_item.dart';
@@ -966,6 +967,7 @@ class _HomeScreenState extends State<HomeScreen> {
         TranscriptionProvider.localWhisper =>
           await _transcribeWithSavedWhisper(item, language),
       };
+      result = result.withoutPunctuationOnlySegments();
 
       String? diarizationNote;
       final diarizationEnabled =
@@ -3240,11 +3242,33 @@ class _HomeScreenState extends State<HomeScreen> {
   ) async {
     try {
       final saved = await _transcriptExport.save(item, format);
-      if (saved) {
-        _message(_t('${format.label} 파일로 내보냈습니다.', 'Exported ${format.label} file.'));
+      if (saved != null) {
+        final location = TranscriptExportService.readableLocation(
+            saved, _transcriptExport.fileNameFor(item, format));
+        _message(location == null
+            ? _t('${format.label} 파일로 저장했습니다.', 'Saved ${format.label} file.')
+            : _t('${format.label} 파일로 저장했습니다.\n위치: $location',
+                'Saved ${format.label} file.\nLocation: $location'));
       }
     } catch (e) {
       _message(_t('전사문을 내보내지 못했습니다: $e', 'Could not export transcript: $e'), error: true);
+    }
+  }
+
+  /// Opens the system share sheet with the transcript text, so it can go
+  /// straight into ChatGPT, KakaoTalk, notes and so on.
+  Future<void> _shareTranscript(RecordingItem item, BuildContext buttonContext) async {
+    final box = buttonContext.findRenderObject() as RenderBox?;
+    try {
+      await SharePlus.instance.share(ShareParams(
+        text: item.transcript!.trim(),
+        subject: _title(item),
+        // iPad and macOS anchor the share popover to the button.
+        sharePositionOrigin:
+            box == null ? null : box.localToGlobal(Offset.zero) & box.size,
+      ));
+    } catch (e) {
+      _message(_t('공유하지 못했습니다: $e', 'Could not share: $e'), error: true);
     }
   }
 
@@ -4765,6 +4789,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       icon: const Icon(Icons.copy_outlined, size: 17),
                       label: Text(_t('복사', 'Copy')),
                     ),
+                  if (item.hasTranscript && !Platform.isWindows)
+                    Builder(
+                      builder: (buttonContext) => OutlinedButton.icon(
+                        onPressed: () => unawaited(_shareTranscript(item, buttonContext)),
+                        icon: const Icon(Icons.share_outlined, size: 17),
+                        label: Text(_t('공유', 'Share')),
+                      ),
+                    ),
                   if (item.hasTranscript) exportButton(),
                   if (active && _isPlayingAudio)
                     Container(
@@ -5527,7 +5559,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Widget _buildCalendarRecordingTile(RecordingItem item) {
+  Widget _buildCalendarRecordingTile(RecordingItem item, {required bool openInSheet}) {
     final duration =
         item.durationMs > 0 ? formatDuration(item.duration) : '--:--';
 
@@ -5537,12 +5569,15 @@ class _HomeScreenState extends State<HomeScreen> {
       preview: _recordingPreview(item),
       hasTranscript: item.hasTranscript,
       maxPreviewLines: 4,
-      onTap: () {
-        setState(() {
-          _selectedRecordingId = item.id;
-          _workspaceView = _WorkspaceView.records;
-        });
-      },
+      // Phones open the recording itself; desktop shows it in the records pane.
+      onTap: openInSheet
+          ? () => unawaited(_showRecordingDetails(item))
+          : () {
+              setState(() {
+                _selectedRecordingId = item.id;
+                _workspaceView = _WorkspaceView.records;
+              });
+            },
       onLongPress: () => unawaited(_showRecordingActions(item)),
       onDoubleTap: () => unawaited(_rename(item)),
       menuTooltip: _t('기록 메뉴', 'Recording menu'),
@@ -5555,7 +5590,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCalendarWorkspace() {
+  Widget _buildCalendarWorkspace({bool openInSheet = false}) {
     final scheme = Theme.of(context).colorScheme;
     final localNow = DateTime.now();
     final selectedDate = _selectedCalendarDate;
@@ -5792,7 +5827,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final agendaItems = <Widget>[
-      for (final item in selectedItems) _buildCalendarRecordingTile(item),
+      for (final item in selectedItems)
+        _buildCalendarRecordingTile(item, openInSheet: openInSheet),
     ];
 
     return Padding(
@@ -6126,7 +6162,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ])),
           ],
           body: _workspaceView == _WorkspaceView.calendar
-              ? _buildCalendarWorkspace()
+              ? _buildCalendarWorkspace(openInSheet: true)
               : _buildMobileScopeBody(filtered),
         );
       },

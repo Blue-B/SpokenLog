@@ -35,7 +35,8 @@ class TranscriptExportService {
     };
   }
 
-  Future<bool> save(
+  /// Returns where the file was saved, or null when the user cancelled.
+  Future<Uri?> save(
     RecordingItem item,
     TranscriptExportFormat format,
   ) async {
@@ -44,7 +45,7 @@ class TranscriptExportService {
     }
 
     final content = buildText(item, format);
-    final fileName = '${_safeFileName(item.displayTitle)}.${format.extension}';
+    final fileName = fileNameFor(item, format);
 
     final result = await FilePicker.saveFile(
       dialogTitle: '전사문 내보내기',
@@ -54,8 +55,35 @@ class TranscriptExportService {
       bytes: Uint8List.fromList(utf8.encode(content)),
     );
 
-    return result != null;
+    return result;
   }
+
+  /// Where an export went, in words people can find again, or null.
+  ///
+  /// On Android the file picker hands back only the path of the document it
+  /// wrote, e.g. `/document/primary:Download/note.txt` (storage folders),
+  /// `/document/raw:/storage/emulated/0/Download/note.txt`, or
+  /// `/document/msf:42` (the Downloads shortcut, which saves into Download).
+  static String? readableLocation(Uri saved, String fileName) {
+    final segments = saved.pathSegments; // already percent-decoded
+    final at = segments.indexOf('document');
+    if (at < 0 || at == segments.length - 1) {
+      if (saved.scheme == 'file') return saved.toFilePath();
+      return saved.scheme.isEmpty && saved.path.startsWith('/') ? saved.path : null;
+    }
+    final id = segments.sublist(at + 1).join('/');
+    if (id.startsWith('raw:')) {
+      return id.substring(4).replaceFirst(RegExp(r'^/storage/emulated/\d+/'), '');
+    }
+    if (id.startsWith('msf:') || RegExp(r'^\d+$').hasMatch(id)) {
+      return 'Download/$fileName';
+    }
+    final colon = id.indexOf(':');
+    return colon < 0 ? null : id.substring(colon + 1);
+  }
+
+  String fileNameFor(RecordingItem item, TranscriptExportFormat format) =>
+      '${_safeFileName(item.displayTitle)}.${format.extension}';
 
   String _txt(RecordingItem item) {
     if (item.segments.isEmpty) {

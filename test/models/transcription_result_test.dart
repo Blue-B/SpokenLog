@@ -70,4 +70,33 @@ void main() {
 
     expect(result.segments, isEmpty);
   });
+
+  test('drops Whisper silence marks like ". . . ." before the speech', () {
+    final result = TranscriptionResult.fromJson({
+      'text': '. . . 안녕하세요 회의 시작합니다.',
+      'duration': 9,
+      'segments': [
+        {'start': 0, 'end': 1, 'text': '.'},
+        {'start': 1, 'end': 2, 'text': '...'},
+        {'start': 2, 'end': 3, 'text': '…'},
+        {'start': 3, 'end': 6, 'text': '안녕하세요'},
+        {'start': 6, 'end': 9, 'text': '회의 시작합니다.'},
+      ],
+    }).withoutPunctuationOnlySegments();
+
+    expect(result.text, '안녕하세요 회의 시작합니다.');
+    expect(result.segments.map((s) => s.startSeconds), [3, 6]);
+    expect(result.durationSeconds, 9);
+  });
+
+  test('keeps a result whose segments are all speech', () {
+    final result = TranscriptionResult.fromJson({
+      'text': 'Hello there',
+      'segments': [
+        {'start': 0, 'end': 1, 'text': 'Hello there'},
+      ],
+    });
+
+    expect(result.withoutPunctuationOnlySegments(), same(result));
+  });
 }

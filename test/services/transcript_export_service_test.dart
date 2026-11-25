@@ -68,4 +68,22 @@ void main() {
     expect(text, contains('"speaker": 0'));
     expect(text, contains('"0": "진행자"'));
   });
+
+  test('names the folder an export was saved to', () {
+    // What the Android file picker returns: the document path only, parsed
+    // with Uri.tryParse(path) ?? Uri.file(path).
+    String? android(String path) => TranscriptExportService.readableLocation(
+        Uri.tryParse(path) ?? Uri.file(path), '회의.txt');
+
+    expect(android('/document/primary:Documents/회의.txt'), 'Documents/회의.txt');
+    expect(android('/document/raw:/storage/emulated/0/Download/회의.txt'),
+        'Download/회의.txt');
+    expect(android('/document/msf:42'), 'Download/회의.txt');
+    expect(android('/document/1234'), 'Download/회의.txt');
+    expect(
+      TranscriptExportService.readableLocation(
+          Uri.file('/home/me/note.txt'), 'note.txt'),
+      '/home/me/note.txt',
+    );
+  });
 }

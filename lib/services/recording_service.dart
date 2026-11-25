@@ -49,6 +49,18 @@ class RecordingService {
     }
   }
 
+  /// WAV header length, or on Android the file's own metadata for audio kept
+  /// in its original format (m4a, mp3, ...). 0 when unknown.
+  Future<int> _audioDurationMs(File file) async {
+    final wav = await readWavDurationMs(file);
+    if (wav > 0 || !Platform.isAndroid) return wav;
+    try {
+      return await _audioChannel.invokeMethod<int>('durationMs', {'path': file.path}) ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Replaces a recording's non-WAV audio with a decoded WAV in place.
   /// Returns null when nothing could be converted.
   Future<RecordingItem?> convertRecordingToWav(RecordingItem item) async {
@@ -506,13 +518,14 @@ class RecordingService {
       );
     }
 
-    // Old imports saved zero duration. Read only the bounded WAV header;
-    // do not rewrite existing audio or metadata during library loading.
+    // Old imports and files kept in their original format saved zero
+    // duration. Read only headers/metadata; do not rewrite audio or metadata
+    // during library loading.
     if (dir.path != _activeSessionDir?.path) {
       for (final file in audioFiles) {
         final name = file.uri.pathSegments.last;
         if ((durations[name] ?? 0) <= 0) {
-          durations[name] = await readWavDurationMs(file);
+          durations[name] = await _audioDurationMs(file);
         }
       }
     }
@@ -678,7 +691,7 @@ class RecordingService {
         // Without a decoder the original is kept; cloud transcription still reads it.
         importedFile = await source.copy(targetPath);
       }
-      final durationMs = await readWavDurationMs(importedFile);
+      final durationMs = await _audioDurationMs(importedFile);
 
       final metadata = <String, dynamic>{
         'version': 5,
