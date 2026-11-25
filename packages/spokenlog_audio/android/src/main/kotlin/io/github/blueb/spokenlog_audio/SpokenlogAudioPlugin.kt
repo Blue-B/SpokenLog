@@ -13,6 +13,7 @@ import android.os.Handler
 import android.os.Looper
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
+import androidx.core.content.FileProvider
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
 import io.flutter.embedding.engine.plugins.activity.ActivityPluginBinding
@@ -79,6 +80,24 @@ class SpokenlogAudioPlugin :
 
             "pickAudio" -> {
                 pickAudio(result)
+            }
+
+            // Opens the system installer for a downloaded update. Android asks the
+            // user to confirm, and once to allow installs from SpokenLog.
+            "installApk" -> {
+                val activity = binding?.activity ?: return result.error("no_activity", "No foreground activity", null)
+                try {
+                    val file = File(call.argument<String>("path")!!)
+                    val uri = FileProvider.getUriForFile(activity, "${activity.packageName}.spokenlog_update", file)
+                    val intent =
+                        Intent(Intent.ACTION_VIEW)
+                            .setDataAndType(uri, "application/vnd.android.package-archive")
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    activity.startActivity(intent)
+                    result.success(null)
+                } catch (e: Exception) {
+                    result.error("install_failed", e.message, null)
+                }
             }
 
             // Length of a file kept in its original format (m4a, mp3, ...); 0 if unknown.

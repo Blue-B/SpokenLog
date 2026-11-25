@@ -27,6 +27,7 @@ import '../services/wav_waveform_service.dart';
 import '../services/recording_service.dart';
 import '../services/settings_service.dart';
 import '../services/transcript_export_service.dart';
+import '../services/update_service.dart';
 import '../utils/formatters.dart';
 import '../widgets/transcript_editor_dialog.dart';
 import '../widgets/mobile_library_widgets.dart';
@@ -65,6 +66,7 @@ class _HomeScreenState extends State<HomeScreen> {
   late final _recording = widget.recordingService ?? RecordingService();
   late final _settings = widget.settingsService ?? SettingsService();
   final _transcriptExport = TranscriptExportService();
+  final _updates = UpdateService();
   final _groq = GroqTranscriptionService();
   final _cloudflare = CloudflareTranscriptionService();
   final _senseVoiceModelManager = SenseVoiceModelManager();
@@ -162,6 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
       unawaited(_reload().then((_) => _importSharedFiles()));
       // After the first frame, so a failure can show a message.
       if (_mcpSupported) unawaited(_restoreMcp());
+      if (UpdateService.supported) unawaited(_checkForUpdate());
     });
     unawaited(_loadTranscriptionPreference());
     unawaited(_loadUiPreferences());
@@ -249,6 +252,73 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Desktop only: phones suspend background apps, so a local server would vanish.
   bool get _mcpSupported => Platform.isWindows || Platform.isMacOS;
+
+  /// Offers a newer GitHub release once per launch; quiet when offline.
+  Future<void> _checkForUpdate() async {
+    final AvailableUpdate? update;
+    try {
+      update = await _updates.check();
+    } catch (_) {
+      return;
+    }
+    if (update == null || !mounted) return;
+    final megabytes = (update.sizeBytes / (1024 * 1024)).round();
+    final version = update.version;
+    final accepted = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_t('새 버전 $version', 'New version $version')),
+        content: Text(_t(
+          '업데이트를 내려받아 설치할까요? 약 $megabytes MB입니다. 녹음과 전사문은 그대로 남습니다.',
+          'Download and install the update? About $megabytes MB. Recordings and transcripts are kept.',
+        )),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(_t('나중에', 'Later')),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text(_t('업데이트', 'Update')),
+          ),
+        ],
+      ),
+    );
+    if (accepted != true || !mounted) return;
+
+    final progress = ValueNotifier<double>(0);
+    final navigator = Navigator.of(context);
+    unawaited(showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => AlertDialog(
+        title: Text(_t('업데이트 내려받는 중', 'Downloading update')),
+        content: ValueListenableBuilder<double>(
+          valueListenable: progress,
+          builder: (_, value, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LinearProgressIndicator(value: value),
+              const SizedBox(height: 10),
+              Text('${(value * 100).round()}%'),
+            ],
+          ),
+        ),
+      ),
+    ));
+    try {
+      final package = await _updates.download(update, onProgress: (v) => progress.value = v);
+      navigator.pop();
+      await _updates.install(package);
+      // The Windows installer replaces the running files and starts the new version.
+      if (Platform.isWindows) exit(0);
+    } catch (e) {
+      navigator.pop();
+      _message(_t('업데이트하지 못했습니다: $e', 'Could not update: $e'), error: true);
+    } finally {
+      progress.dispose();
+    }
+  }
 
   Future<void> _restoreMcp() async {
     try {

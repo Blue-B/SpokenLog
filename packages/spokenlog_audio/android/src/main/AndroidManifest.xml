@@ -1,2 +1,16 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- In-app updates: hand a downloaded release APK to the system installer. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <application>
+        <provider
+            android:name="io.github.blueb.spokenlog_audio.UpdateFileProvider"
+            android:authorities="${applicationId}.spokenlog_update"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/spokenlog_update_paths" />
+        </provider>
+    </application>
 </manifest>

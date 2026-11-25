@@ -34,6 +34,9 @@ Source: "{#ReleaseDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 [Icons]
 Name: "{group}\SpokenLog"; Filename: "{app}\SpokenLog.exe"
 Name: "{group}\Uninstall SpokenLog"; Filename: "{uninstallexe}"
+[Run]
+; The in-app updater installs with /SILENT after quitting; start the new version.
+Filename: "{app}\SpokenLog.exe"; Flags: nowait skipifnotsilent
 [Code]
 function InitializeUninstall(): Boolean;
 var
