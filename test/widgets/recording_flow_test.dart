@@ -1145,6 +1145,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('an empty Favorites list says so instead of "no recordings"',
+      (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester, recording: FakeRecordingService([buildItem(wavPath)]),
+        settings: FakeSettingsService(), player: player);
+
+    await tester.tap(find.text('즐겨찾기').first);
+    await tester.pump();
+    expect(find.text('즐겨찾기한 녹음이 없습니다.'), findsOneWidget);
+    expect(find.text('아직 저장된 녹음이 없습니다.'), findsNothing);
+  });
+
   testWidgets('phone search keeps focus when a letter leaves no results',
       (tester) async {
     final recording = FakeRecordingService([buildItem(wavPath)]);

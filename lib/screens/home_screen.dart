@@ -4975,7 +4975,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   if (item.segments.isNotEmpty)
                     Text(
-                      _t('시간을 누르면 해당 위치에서 재생됩니다.', 'Click a timestamp to play from that point.'),
+                      _t('시간을 누르면 해당 위치에서 재생됩니다.',
+                          Platform.isAndroid || Platform.isIOS
+                              ? 'Tap a timestamp to play from that point.'
+                              : 'Click a timestamp to play from that point.'),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
@@ -6316,6 +6319,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildEmptyState({required bool searchEmpty}) {
     final scheme = Theme.of(context).colorScheme;
+    // Say why this list is empty: an empty Favorites or Trash is not "no
+    // recordings yet" when the library has recordings.
+    final (IconData icon, String title, String body) = searchEmpty
+        ? (Icons.search_off_rounded, _t('검색 결과가 없습니다.', 'No results found.'),
+            _t('다른 검색어로 다시 검색해 보세요.', 'Try another search.'))
+        : _libraryScope == 'favorites'
+            ? (Icons.star_border_rounded, _t('즐겨찾기한 녹음이 없습니다.', 'No favorites yet.'),
+                _t('녹음 메뉴에서 즐겨찾기에 추가하면 여기에 모입니다.',
+                    'Add a recording to favorites from its menu to see it here.'))
+            : _libraryScope == 'trash'
+                ? (Icons.delete_outline_rounded, _t('휴지통이 비어 있습니다.', 'Trash is empty.'),
+                    _t('휴지통으로 옮긴 녹음은 여기서 복원하거나 완전히 삭제할 수 있습니다.',
+                        'Recordings moved to Trash can be restored or deleted here.'))
+                : _libraryScope.startsWith('collection:')
+                    ? (Icons.folder_open_rounded, _t('이 보관함은 비어 있습니다.', 'This collection is empty.'),
+                        _t('녹음 메뉴에서 보관함으로 옮길 수 있습니다.',
+                            'Move recordings here from their menu.'))
+                    : (Icons.mic_none_rounded, _t('아직 저장된 녹음이 없습니다.', 'No recordings yet.'),
+                        _t('녹음하거나 파일을 가져와 첫 기록을 만들어 보세요.',
+                            'Record something or import a file to create your first entry.'));
 
     return Center(
       child: Padding(
@@ -6331,27 +6354,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                searchEmpty
-                    ? Icons.search_off_rounded
-                    : Icons.mic_none_rounded,
+                icon,
                 size: 32,
                 color: scheme.onSurfaceVariant,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              searchEmpty
-                  ? _t('검색 결과가 없습니다.', 'No results found.')
-                  : _t('아직 저장된 녹음이 없습니다.', 'No recordings yet.'),
+              title,
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                     fontWeight: FontWeight.w700,
                   ),
             ),
             const SizedBox(height: 6),
             Text(
-              searchEmpty
-                  ? _t('다른 검색어로 다시 검색해 보세요.', 'Try another search.')
-                  : _t('녹음하거나 파일을 가져와 첫 기록을 만들어 보세요.', 'Record something or import a file to create your first entry.'),
+              body,
+              textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
