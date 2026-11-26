@@ -32,25 +32,21 @@ void main() {
       MobileScopeTab(
         scope: 'all',
         label: '전체',
-        icon: Icons.folder_open_rounded,
         count: 12,
       ),
       MobileScopeTab(
         scope: 'favorites',
         label: '즐겨찾기',
-        icon: Icons.star_outline_rounded,
         count: 3,
       ),
       MobileScopeTab(
         scope: 'collections',
         label: '보관함',
-        icon: Icons.folder_copy_outlined,
         count: 7,
       ),
       MobileScopeTab(
         scope: 'trash',
         label: '휴지통',
-        icon: Icons.delete_outline_rounded,
         count: 1,
       ),
     ];

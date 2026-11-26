@@ -21,13 +21,11 @@ class MobileScopeTab {
   const MobileScopeTab({
     required this.scope,
     required this.label,
-    required this.icon,
     this.count,
   });
 
   final String scope;
   final String label;
-  final IconData icon;
   final int? count;
 }
 
@@ -35,7 +33,8 @@ class MobileScopeTab {
 ///
 /// Replaces the previous chip row that overflowed off-screen once a few
 /// collections existed. Every scope (including Trash) stays reachable because
-/// the tabs share the available width equally.
+/// the tabs share the available width equally. Styled as an underlined tab
+/// row: the label with its count, the selected one in the accent colour.
 class MobileLibraryScopeBar extends StatelessWidget {
   const MobileLibraryScopeBar({
     super.key,
@@ -50,8 +49,13 @@ class MobileLibraryScopeBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+    final scheme = Theme.of(context).colorScheme;
+    return Container(
+      margin: const EdgeInsets.only(top: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: scheme.outlineVariant)),
+      ),
       child: Row(
         children: [
           for (final tab in tabs)
@@ -59,7 +63,6 @@ class MobileLibraryScopeBar extends StatelessWidget {
               child: _ScopeTab(
                 scope: tab.scope,
                 label: tab.label,
-                icon: tab.icon,
                 count: tab.count,
                 selected: selectedScope == tab.scope,
                 onSelected: onScopeSelected,
@@ -75,7 +78,6 @@ class _ScopeTab extends StatelessWidget {
   const _ScopeTab({
     required this.scope,
     required this.label,
-    required this.icon,
     required this.selected,
     required this.onSelected,
     this.count,
@@ -83,7 +85,6 @@ class _ScopeTab extends StatelessWidget {
 
   final String scope;
   final String label;
-  final IconData icon;
   final bool selected;
   final ValueChanged<String> onSelected;
   final int? count;
@@ -91,52 +92,46 @@ class _ScopeTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
-    final foreground =
-        selected ? scheme.onPrimaryContainer : scheme.onSurfaceVariant;
+    final text = Theme.of(context).textTheme;
+    final color = selected ? scheme.primary : scheme.onSurfaceVariant;
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: Material(
-        color: selected ? scheme.primaryContainer : scheme.surfaceContainerLow,
-        borderRadius: BorderRadius.circular(11),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(11),
-          onTap: () => onSelected(scope),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(11),
-              border: Border.all(
-                color: selected
-                    ? scheme.primary.withValues(alpha: 0.5)
-                    : Colors.transparent,
+    return Semantics(
+      selected: selected,
+      button: true,
+      child: InkWell(
+        onTap: () => onSelected(scope),
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 48),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: selected ? scheme.primary : Colors.transparent,
+                width: 2.5,
               ),
             ),
-            child: Column(
+          ),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(icon, size: 18, color: foreground),
-                const SizedBox(height: 2),
                 Text(
                   label,
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        fontWeight:
-                            selected ? FontWeight.w800 : FontWeight.w600,
-                        color: foreground,
-                      ),
+                  style: text.labelLarge?.copyWith(
+                    color: selected ? scheme.onSurface : color,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                  ),
                 ),
                 if (count != null) ...[
-                  const SizedBox(height: 1),
+                  const SizedBox(width: 4),
                   Text(
                     '$count',
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          fontSize: 10,
-                          height: 1,
-                          color: foreground,
-                        ),
+                    style: text.labelMedium?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ],

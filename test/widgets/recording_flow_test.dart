@@ -1064,7 +1064,7 @@ void main() {
       recording: FakeRecordingService([buildItem(wavPath)]),
       settings: settings, player: player,
       size: const Size(640, 360), textScale: 1.5);
-    await tester.tap(find.text('Whisper Tiny INT8 · Auto detect'));
+    await tester.tap(find.byTooltip('Change speech recognition'));
     await tester.pumpAndSettle();
     expect(find.text('Quick speech settings'), findsOneWidget);
     expect(find.text('자동 감지'), findsNothing);
@@ -1180,6 +1180,23 @@ void main() {
     expect(handled, isTrue);
     expect(find.text('이 보관함은 비어 있습니다.'), findsNothing);
     expect(find.text('Meetings'), findsWidgets);
+  });
+
+  testWidgets('phone share offers text, timed text, and audio with timed text',
+      (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester,
+        recording: FakeRecordingService([buildItem(wavPath, transcript: 'Demo')]),
+        settings: FakeSettingsService(), player: player);
+    await openRecordingDetails(tester);
+
+    await tester.tap(inDetails(find.byTooltip('공유')));
+    await tester.pumpAndSettle();
+    expect(find.text('전사문만'), findsOneWidget);
+    expect(find.text('전사문 + 시간'), findsOneWidget);
+    expect(find.text('음성 파일 + 시간 포함 전사문'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('phone search keeps focus when a letter leaves no results',

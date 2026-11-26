@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../models/recording_collection.dart';
@@ -48,6 +49,9 @@ import '../widgets/storage_management_dialog.dart';
 import '../widgets/recording_details_sheet.dart';
 
 enum _WorkspaceView { records, calendar }
+
+/// What the share button sends.
+enum _ShareContent { text, timedText, audioWithTimedText }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.recordingService, this.settingsService,
@@ -3348,20 +3352,50 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Opens the system share sheet with the transcript text, so it can go
-  /// straight into ChatGPT, KakaoTalk, notes and so on.
-  /// [withTimes] adds "[mm:ss]" before each line, like the TXT export.
+  /// Opens the system share sheet, so the transcript (and the audio) can go
+  /// straight into ChatGPT, KakaoTalk, Telegram, notes and so on.
+  /// Timed text adds "[mm:ss]" before each line, like the TXT export; the
+  /// audio option sends the recording files plus that text as a .txt file.
   Future<void> _shareTranscript(
     RecordingItem item,
     BuildContext buttonContext, {
-    required bool withTimes,
+    required _ShareContent content,
   }) async {
     final box = buttonContext.findRenderObject() as RenderBox?;
     try {
+      final timed = _transcriptExport.buildText(item, TranscriptExportFormat.txt);
+      final files = <XFile>[];
+      if (content == _ShareContent.audioWithTimedText) {
+        // Receiving apps show the file's own name ("recording.wav"), so share
+        // copies named after the recording; last share's copies are removed.
+        final dir = Directory('${(await getTemporaryDirectory()).path}'
+            '${Platform.pathSeparator}spokenlog_share');
+        if (await dir.exists()) await dir.delete(recursive: true);
+        await dir.create(recursive: true);
+        final textName = _transcriptExport.fileNameFor(item, TranscriptExportFormat.txt);
+        final base = textName.substring(0, textName.length - 4);
+        final audio = item.audioPaths;
+        for (var i = 0; i < audio.length; i++) {
+          final path = audio[i];
+          final dot = path.lastIndexOf('.');
+          final ext = dot < 0 ? '' : path.substring(dot).toLowerCase();
+          final name = audio.length == 1 ? '$base$ext' : '$base (${i + 1})$ext';
+          final copy = await File(path).copy('${dir.path}${Platform.pathSeparator}$name');
+          files.add(XFile(copy.path, mimeType: ext == '.wav' ? 'audio/wav' : null));
+        }
+        if (item.hasTranscript) {
+          final txt = File('${dir.path}${Platform.pathSeparator}$textName');
+          await txt.writeAsString(timed);
+          files.add(XFile(txt.path, mimeType: 'text/plain'));
+        }
+      }
       await SharePlus.instance.share(ShareParams(
-        text: withTimes
-            ? _transcriptExport.buildText(item, TranscriptExportFormat.txt)
-            : item.transcript!.trim(),
+        text: files.isNotEmpty
+            ? null
+            : content == _ShareContent.timedText
+                ? timed
+                : item.transcript!.trim(),
+        files: files.isEmpty ? null : files,
         subject: _title(item),
         // iPad and macOS anchor the share popover to the button.
         sharePositionOrigin:
@@ -3845,6 +3879,8 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  /// Phones and narrow windows: brand, import and settings on one row, then
+  /// the current engine as one tappable line. Recording lives in the dock.
   Widget _buildTopBar() {
     final scheme = Theme.of(context).colorScheme;
 
@@ -3854,113 +3890,83 @@ class _HomeScreenState extends State<HomeScreen> {
           return const SizedBox.shrink();
         }
 
-        final compact = constraints.maxWidth < 600;
-
-        return Container(
-          padding: EdgeInsets.fromLTRB(
-            compact ? 12 : 16,
-            10,
-            compact ? 12 : 16,
-            11,
-          ),
-          decoration: BoxDecoration(
-            color: scheme.surface,
-            border: Border(
-              bottom: BorderSide(color: scheme.outlineVariant),
-            ),
-          ),
+        final language = _language.displayLabel(useEnglish: _useEnglish);
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 6, 8, 4),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 children: [
-                  Expanded(child: Align(alignment: Alignment.centerLeft,
-                    child: FittedBox(fit: BoxFit.scaleDown,
-                      child: _buildBrand(iconSize: 34)))),
-                  IconButton.filledTonal(
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: _buildBrand(iconSize: 30),
+                      ),
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _importingFiles || _isRecording ? null : _pickAudioFiles,
+                    icon: _importingFiles
+                        ? const SizedBox.square(
+                            dimension: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.file_upload_outlined, size: 20),
+                    label: Text(_importingFiles
+                        ? _t('가져오는 중', 'Importing')
+                        : _t('가져오기', 'Import')),
+                  ),
+                  IconButton(
                     tooltip: _t('설정', 'Settings'),
                     onPressed: () => unawaited(_showAppSettings()),
                     icon: const Icon(Icons.settings_outlined),
                   ),
                 ],
               ),
-              const SizedBox(height: 9),
-              _buildEngineBadge(wide: true),
-              const SizedBox(height: 9),
-              if (_isRecording)
-                Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: scheme.error,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        (_isPausedRecording
-                                ? _t('일시정지', 'Paused')
-                                : _t('녹음 중', 'Recording')) +
-                            ' · ' +
-                            formatDuration(_liveRecordingDuration),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              fontWeight: FontWeight.w700,
+              const SizedBox(height: 4),
+              Tooltip(
+                message: _t('음성 인식 바꾸기', 'Change speech recognition'),
+                child: Material(
+                  color: scheme.surfaceContainerHigh,
+                  shape: const StadiumBorder(),
+                  child: InkWell(
+                    customBorder: const StadiumBorder(),
+                    onTap: () => unawaited(_showQuickTranscriptionPanel()),
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _provider.isLocal
+                                ? Icons.smartphone_rounded
+                                : Icons.cloud_outlined,
+                            size: 17,
+                            color: scheme.primary,
+                          ),
+                          const SizedBox(width: 7),
+                          Flexible(
+                            child: Text(
+                              '${_provider.shortLabel} · $language',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
                             ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(Icons.expand_more_rounded,
+                              size: 18, color: scheme.onSurfaceVariant),
+                        ],
                       ),
                     ),
-                    IconButton(
-                      tooltip: _isPausedRecording
-                          ? _t('계속 녹음', 'Resume recording')
-                          : _t('일시정지', 'Pause'),
-                      onPressed: _toggleRecordingPause,
-                      icon: Icon(
-                        _isPausedRecording
-                            ? Icons.play_arrow_rounded
-                            : Icons.pause_rounded,
-                      ),
-                    ),
-                    FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: scheme.error,
-                        foregroundColor: scheme.onError,
-                      ),
-                      onPressed: _stopRecording,
-                      icon: const Icon(Icons.stop_rounded, size: 18),
-                      label: Text(_t('종료', 'Stop')),
-                    ),
-                  ],
-                )
-              else
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: _importingFiles ? null : _pickAudioFiles,
-                        icon: _importingFiles
-                            ? const SizedBox.square(
-                                dimension: 17,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.upload_file_rounded, size: 19),
-                        label: Text(
-                          _importingFiles
-                              ? _t('가져오는 중', 'Importing')
-                              : _t('파일 가져오기', 'Import file'),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: FilledButton.icon(
-                        onPressed: _startRecording,
-                        icon: const Icon(Icons.mic_none_rounded, size: 19),
-                        label: Text(_t('새 녹음', 'New recording')),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
+              ),
             ],
           ),
         );
@@ -3968,7 +3974,136 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSidebarHeader() {
+  /// Phone dock: Records and Calendar either side of the record button;
+  /// while recording it becomes the timer with pause and stop.
+  Widget _buildMobileDock() {
+    final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+
+    Widget tab(_WorkspaceView view, IconData icon, IconData selectedIcon, String label) {
+      final selected = _workspaceView == view;
+      final color = selected ? scheme.primary : scheme.onSurfaceVariant;
+      return InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: () => setState(() => _workspaceView = view),
+        child: SizedBox(
+          height: 56,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(selected ? selectedIcon : icon, size: 24, color: color),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: text.labelMedium?.copyWith(
+                  color: color,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final Widget content = _isRecording
+        ? Row(
+            children: [
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: _isPausedRecording ? scheme.outline : scheme.error,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      _isPausedRecording ? _t('일시정지', 'Paused') : _t('녹음 중', 'Recording'),
+                      style: text.labelMedium?.copyWith(color: scheme.onSurfaceVariant),
+                    ),
+                    Text(
+                      formatDuration(_liveRecordingDuration),
+                      style: text.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton.outlined(
+                tooltip: _isPausedRecording
+                    ? _t('계속 녹음', 'Resume recording')
+                    : _t('일시정지', 'Pause'),
+                onPressed: _toggleRecordingPause,
+                icon: Icon(_isPausedRecording ? Icons.mic_rounded : Icons.pause_rounded),
+              ),
+              const SizedBox(width: 8),
+              FilledButton.icon(
+                style: FilledButton.styleFrom(
+                  backgroundColor: scheme.error,
+                  foregroundColor: scheme.onError,
+                  minimumSize: const Size(0, 52),
+                  shape: const StadiumBorder(),
+                ),
+                onPressed: _stopRecording,
+                icon: const Icon(Icons.stop_rounded),
+                label: Text(_t('종료', 'Stop')),
+              ),
+            ],
+          )
+        : Row(
+            children: [
+              Expanded(
+                child: tab(_WorkspaceView.records, Icons.folder_outlined,
+                    Icons.folder_rounded, _t('기록', 'Records')),
+              ),
+              Expanded(
+                flex: 2,
+                child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: const StadiumBorder(),
+                    textStyle: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+                  ),
+                  onPressed: _startRecording,
+                  icon: const Icon(Icons.mic_rounded, size: 22),
+                  label: Text(_t('녹음', 'Record')),
+                ),
+              ),
+              Expanded(
+                child: tab(_WorkspaceView.calendar, Icons.calendar_month_outlined,
+                    Icons.calendar_month_rounded, _t('캘린더', 'Calendar')),
+              ),
+            ],
+          );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surface,
+        border: Border(top: BorderSide(color: scheme.outlineVariant)),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          child: content,
+        ),
+      ),
+    );
+  }
+
+  /// [compact] (phones): the scope tabs already name the list, so it starts
+  /// with the search field and one summary line with the Select action.
+  Widget _buildSidebarHeader({bool compact = false}) {
     final scheme = Theme.of(context).colorScheme;
     final scoped = _scopeItems();
     final transcriptCount = scoped.where((item) => item.hasTranscript).length;
@@ -3979,12 +4114,87 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     final selectedCount = _batchSelectedIds.length;
+    final searchBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(14),
+      borderSide: BorderSide.none,
+    );
+    final searchField = SizedBox(
+      height: compact ? 46 : 42,
+      child: TextField(
+        controller: _searchController,
+        onChanged: (value) => setState(() {
+          _query = value;
+          _batchSelectedIds.clear();
+        }),
+        style: Theme.of(context).textTheme.bodyMedium,
+        decoration: InputDecoration(
+          hintText: _t('제목이나 전사 내용 검색…', 'Search titles or transcripts…'),
+          prefixIcon: const Icon(Icons.search_rounded, size: 19),
+          suffixIcon: _query.isEmpty
+              ? null
+              : IconButton(
+                  tooltip: _t('검색 지우기', 'Clear search'),
+                  onPressed: () {
+                    _searchController.clear();
+                    setState(() => _query = '');
+                  },
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+          contentPadding: const EdgeInsets.symmetric(vertical: 8),
+          // Phones: a quiet filled field instead of an outlined box.
+          filled: compact ? true : null,
+          fillColor: compact ? scheme.surfaceContainerHigh : null,
+          border: compact ? searchBorder : null,
+          enabledBorder: compact ? searchBorder : null,
+          focusedBorder: compact
+              ? searchBorder.copyWith(
+                  borderSide: BorderSide(color: scheme.primary, width: 1.5))
+              : null,
+        ),
+      ),
+    );
+    final totalText = Text(
+      _useEnglish
+          ? 'Total ${formatDuration(scopedDuration)} · $transcriptCount transcribed'
+          : '총 ${formatDuration(scopedDuration)} · 전사 $transcriptCount개',
+      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+    );
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(14, 15, 14, 11),
+      padding: compact
+          ? const EdgeInsets.fromLTRB(16, 12, 16, 6)
+          : const EdgeInsets.fromLTRB(14, 15, 14, 11),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (compact) ...[
+            searchField,
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _useEnglish
+                        ? '${scoped.length} · ${formatDuration(scopedDuration)} · $transcriptCount transcribed'
+                        : '${scoped.length}개 · ${formatDuration(scopedDuration)} · 전사 $transcriptCount개',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                  ),
+                ),
+                if (!_selectionMode && scoped.isNotEmpty)
+                  TextButton(
+                    onPressed: () => setState(() => _selectionMode = true),
+                    child: Text(_t('선택', 'Select')),
+                  )
+                else
+                  const SizedBox(height: 48),
+              ],
+            ),
+          ] else
           Row(
             children: [
               Expanded(
@@ -4121,45 +4331,15 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ],
-          if (!_selectionMode && scoped.isNotEmpty)
-            Text(_t('길게 누른 뒤 끌어서 여러 개 선택', 'Hold and drag to select multiple'),
-                style: Theme.of(context).textTheme.bodySmall),
-          const SizedBox(height: 11),
-          SizedBox(
-            height: 42,
-            child: TextField(
-              controller: _searchController,
-              onChanged: (value) => setState(() {
-                _query = value;
-                _batchSelectedIds.clear();
-              }),
-              style: Theme.of(context).textTheme.bodyMedium,
-              decoration: InputDecoration(
-                hintText: _t('제목이나 전사 내용 검색…', 'Search titles or transcripts…'),
-                prefixIcon: const Icon(Icons.search_rounded, size: 19),
-                suffixIcon: _query.isEmpty
-                    ? null
-                    : IconButton(
-                        tooltip: _t('검색 지우기', 'Clear search'),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _query = '');
-                        },
-                        icon: const Icon(Icons.close_rounded, size: 18),
-                      ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 8),
-              ),
-            ),
-          ),
-          const SizedBox(height: 9),
-          Text(
-            _useEnglish
-                ? 'Total ${formatDuration(scopedDuration)} · $transcriptCount transcribed'
-                : '총 ${formatDuration(scopedDuration)} · 전사 $transcriptCount개',
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                ),
-          ),
+          if (!compact) ...[
+            if (!_selectionMode && scoped.isNotEmpty)
+              Text(_t('길게 누른 뒤 끌어서 여러 개 선택', 'Hold and drag to select multiple'),
+                  style: Theme.of(context).textTheme.bodySmall),
+            const SizedBox(height: 11),
+            searchField,
+            const SizedBox(height: 9),
+            totalText,
+          ],
         ],
       ),
     );
@@ -4409,7 +4589,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildTranscript(RecordingItem item) {
+  /// [compact] (phone sheet): the rows flow with the sheet's own scroll and
+  /// show only the start time, so the text gets the width.
+  Widget _buildTranscript(RecordingItem item, {bool compact = false}) {
     final scheme = Theme.of(context).colorScheme;
 
     if (!item.hasTranscript) {
@@ -4451,20 +4633,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (item.segments.isNotEmpty) {
       return Container(
-        height: 390,
-        decoration: BoxDecoration(
-          color: scheme.surfaceContainerLowest,
-          border: Border.all(color: scheme.outlineVariant),
-          borderRadius: BorderRadius.circular(10),
-        ),
+        height: compact ? null : 390,
+        decoration: compact
+            ? null
+            : BoxDecoration(
+                color: scheme.surfaceContainerLowest,
+                border: Border.all(color: scheme.outlineVariant),
+                borderRadius: BorderRadius.circular(10),
+              ),
         child: ListView.separated(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          shrinkWrap: compact,
+          physics: compact ? const NeverScrollableScrollPhysics() : null,
+          padding: compact ? EdgeInsets.zero : const EdgeInsets.symmetric(vertical: 8),
           itemCount: item.segments.length,
           separatorBuilder: (_, _) => Divider(
             height: 1,
-            indent: 14,
-            endIndent: 14,
-            color: scheme.outlineVariant,
+            indent: compact ? 0 : 14,
+            endIndent: compact ? 0 : 14,
+            color: scheme.outlineVariant.withValues(alpha: compact ? 0.6 : 1),
           ),
           itemBuilder: (context, index) {
             final segment = item.segments[index];
@@ -4480,17 +4666,23 @@ class _HomeScreenState extends State<HomeScreen> {
                   forcePlay: true,
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+                  padding: compact
+                      ? const EdgeInsets.symmetric(vertical: 12)
+                      : const EdgeInsets.fromLTRB(14, 11, 14, 11),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       SizedBox(
-                        width: 88,
+                        width: compact ? 48 : 88,
                         child: Text(
-                          '${formatTimestamp(segment.startSeconds)}–'
-                          '${formatTimestamp(segment.endSeconds)}',
-                          style:
-                              Theme.of(context).textTheme.labelSmall?.copyWith(
+                          compact
+                              ? formatTimestamp(segment.startSeconds)
+                              : '${formatTimestamp(segment.startSeconds)}–'
+                                  '${formatTimestamp(segment.endSeconds)}',
+                          style: (compact
+                                  ? Theme.of(context).textTheme.labelMedium
+                                  : Theme.of(context).textTheme.labelSmall)
+                              ?.copyWith(
                                     color: scheme.primary,
                                     fontWeight: FontWeight.w700,
                                     fontFeatures: const [
@@ -4525,7 +4717,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         child: Text(
                           segment.text,
-                          style: Theme.of(context).textTheme.bodyMedium,
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                height: compact ? 1.5 : null,
+                              ),
                         ),
                       ),
                     ],
@@ -4775,7 +4969,46 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    Widget exportButton() {
+    // Share and export open menus; the button look differs per layout.
+    Widget shareMenu(Widget child) {
+      return Builder(
+        builder: (buttonContext) => PopupMenuButton<_ShareContent>(
+          tooltip: _t('공유', 'Share'),
+          onSelected: (content) =>
+              unawaited(_shareTranscript(item, buttonContext, content: content)),
+          itemBuilder: (_) => [
+            PopupMenuItem(
+              value: _ShareContent.text,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.notes_rounded),
+                title: Text(_t('전사문만', 'Transcript only')),
+              ),
+            ),
+            PopupMenuItem(
+              value: _ShareContent.timedText,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.schedule_rounded),
+                title: Text(_t('전사문 + 시간', 'Transcript with times')),
+              ),
+            ),
+            PopupMenuItem(
+              value: _ShareContent.audioWithTimedText,
+              child: ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.audio_file_outlined),
+                title: Text(_t('음성 파일 + 시간 포함 전사문', 'Audio + transcript with times')),
+                subtitle: Text(_t('파일 2개로 보냅니다', 'Sent as two files')),
+              ),
+            ),
+          ],
+          child: child,
+        ),
+      );
+    }
+
+    Widget exportMenu(Widget child) {
       return PopupMenuButton<TranscriptExportFormat>(
         tooltip: _t('전사문 내보내기', 'Export transcript'),
         onSelected: (format) {
@@ -4795,46 +5028,158 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             )
             .toList(),
-        child: Container(
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 13),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: scheme.outline),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.download_outlined, size: 17),
-              const SizedBox(width: 7),
-              Text(_t('내보내기', 'Export')),
-              const SizedBox(width: 2),
-              const Icon(Icons.arrow_drop_down_rounded, size: 18),
-            ],
-          ),
+        child: child,
+      );
+    }
+
+    // Looks like an OutlinedButton but is the child of a menu button.
+    Widget menuPill(IconData icon, String label) {
+      return Container(
+        height: 40,
+        padding: const EdgeInsets.symmetric(horizontal: 13),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: scheme.outline),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 17),
+            const SizedBox(width: 7),
+            Text(label),
+            const SizedBox(width: 2),
+            const Icon(Icons.arrow_drop_down_rounded, size: 18),
+          ],
         ),
       );
     }
 
+    // Phone tool: icon over label, all four the same size in one row.
+    Widget tool(IconData icon, String label, {VoidCallback? onTap}) {
+      final content = Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 22, color: scheme.onSurface),
+            const SizedBox(height: 5),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ),
+      );
+      return onTap == null
+          ? Center(child: content)
+          : InkWell(
+              onTap: onTap,
+              borderRadius: BorderRadius.circular(12),
+              child: Center(child: content),
+            );
+    }
+
+    void copyTranscript() {
+      Clipboard.setData(ClipboardData(text: item.transcript!));
+      _message(_t('전사문을 복사했습니다.', 'Transcript copied.'));
+    }
+
+    final transcribeLabel = busy
+        ? _transcribeStatus(item.id)
+        : item.hasTranscript
+            ? _t('다시 전사', 'Transcribe again')
+            : _provider.shortLabel + _t('로 전사', ' transcription');
+    final canShare = item.hasTranscript && !Platform.isWindows;
+
     return LayoutBuilder(
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 600;
+        final transcribeButton = FilledButton.icon(
+          key: ValueKey('transcribe-${item.id}'),
+          style: compact
+              ? FilledButton.styleFrom(minimumSize: const Size.fromHeight(48))
+              : null,
+          onPressed: busy ? null : () => _transcribe(item),
+          icon: busy
+              ? const SizedBox.square(
+                  dimension: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Icon(Icons.auto_awesome_outlined, size: 18),
+          label: Text(transcribeLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
+        );
+        final settingsButton = OutlinedButton.icon(
+          onPressed: busy ? null : () => unawaited(_openSettings()),
+          icon: const Icon(Icons.tune_rounded, size: 18),
+          label: Text(_t('전사 설정', 'Transcription settings'),
+              maxLines: 1, overflow: TextOverflow.ellipsis),
+        );
 
         return Padding(
           padding: compact
-              ? const EdgeInsets.fromLTRB(14, 14, 14, 22)
+              ? const EdgeInsets.fromLTRB(18, 4, 18, 24)
               : const EdgeInsets.fromLTRB(22, 18, 22, 22),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               if (compact) ...[
-                titleBlock(),
-                const SizedBox(height: 5),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: compactMoreMenu(),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: titleBlock()),
+                    compactMoreMenu(),
+                  ],
                 ),
-              ] else
+                const SizedBox(height: 14),
+                _buildPlaybackControls(item),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(child: transcribeButton),
+                    const SizedBox(width: 8),
+                    IconButton.outlined(
+                      tooltip: _t('전사 설정', 'Transcription settings'),
+                      style: IconButton.styleFrom(minimumSize: const Size(48, 48)),
+                      onPressed: busy ? null : () => unawaited(_openSettings()),
+                      icon: const Icon(Icons.tune_rounded),
+                    ),
+                  ],
+                ),
+                if (item.hasTranscript) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: scheme.surfaceContainerLow,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: tool(Icons.edit_note_rounded, _t('수정', 'Edit'),
+                              onTap: () => unawaited(_editTranscript(item))),
+                        ),
+                        Expanded(
+                          child: tool(Icons.copy_rounded, _t('복사', 'Copy'),
+                              onTap: copyTranscript),
+                        ),
+                        if (canShare)
+                          Expanded(
+                            child: shareMenu(
+                                tool(Icons.ios_share_rounded, _t('공유', 'Share'))),
+                          ),
+                        Expanded(
+                          child: exportMenu(tool(
+                              Icons.download_rounded, _t('내보내기', 'Export'))),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ] else ...[
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -4842,110 +5187,54 @@ class _HomeScreenState extends State<HomeScreen> {
                     desktopManagementActions(),
                   ],
                 ),
-              const SizedBox(height: 12),
-              _buildPlaybackControls(item),
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  FilledButton.icon(
-                    key: ValueKey('transcribe-${item.id}'),
-                    onPressed: busy ? null : () => _transcribe(item),
-                    icon: busy
-                        ? const SizedBox.square(
-                            dimension: 15,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Icon(Icons.auto_awesome_outlined, size: 18),
-                    label: Text(
-                      busy
-                          ? _transcribeStatus(item.id)
-                          : item.hasTranscript
-                              ? _t('다시 전사', 'Transcribe again')
-                              : _provider.shortLabel + _t('로 전사', ' transcription'),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: busy ? null : () => unawaited(_openSettings()),
-                    icon: const Icon(Icons.settings_outlined, size: 18),
-                    label: Text(_t('전사 설정', 'Transcription settings')),
-                  ),
-                  if (item.hasTranscript)
-                    OutlinedButton.icon(
-                      onPressed: () => unawaited(_editTranscript(item)),
-                      icon: const Icon(Icons.edit_note_rounded, size: 18),
-                      label: Text(_t('수정', 'Edit')),
-                    ),
-                  if (item.hasTranscript)
-                    OutlinedButton.icon(
-                      onPressed: () {
-                        Clipboard.setData(
-                          ClipboardData(text: item.transcript!),
-                        );
-                        _message(_t('전사문을 복사했습니다.', 'Transcript copied.'));
-                      },
-                      icon: const Icon(Icons.copy_outlined, size: 17),
-                      label: Text(_t('복사', 'Copy')),
-                    ),
-                  if (item.hasTranscript && !Platform.isWindows)
-                    Builder(
-                      builder: (buttonContext) => PopupMenuButton<bool>(
-                        tooltip: _t('전사문 공유', 'Share transcript'),
-                        onSelected: (withTimes) => unawaited(
-                            _shareTranscript(item, buttonContext, withTimes: withTimes)),
-                        itemBuilder: (_) => [
-                          PopupMenuItem(
-                            value: false,
-                            child: Text(_t('텍스트만', 'Text only')),
-                          ),
-                          PopupMenuItem(
-                            value: true,
-                            child: Text(_t('시간 포함', 'With timestamps')),
-                          ),
-                        ],
-                        child: Container(
-                          height: 40,
-                          padding: const EdgeInsets.symmetric(horizontal: 13),
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: scheme.outline),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.share_outlined, size: 17),
-                              const SizedBox(width: 7),
-                              Text(_t('공유', 'Share')),
-                              const SizedBox(width: 2),
-                              const Icon(Icons.arrow_drop_down_rounded, size: 18),
-                            ],
-                          ),
+                const SizedBox(height: 12),
+                _buildPlaybackControls(item),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    transcribeButton,
+                    settingsButton,
+                    if (item.hasTranscript)
+                      OutlinedButton.icon(
+                        onPressed: () => unawaited(_editTranscript(item)),
+                        icon: const Icon(Icons.edit_note_rounded, size: 18),
+                        label: Text(_t('수정', 'Edit')),
+                      ),
+                    if (item.hasTranscript)
+                      OutlinedButton.icon(
+                        onPressed: copyTranscript,
+                        icon: const Icon(Icons.copy_outlined, size: 17),
+                        label: Text(_t('복사', 'Copy')),
+                      ),
+                    if (canShare)
+                      shareMenu(menuPill(Icons.share_outlined, _t('공유', 'Share'))),
+                    if (item.hasTranscript)
+                      exportMenu(
+                          menuPill(Icons.download_outlined, _t('내보내기', 'Export'))),
+                    if (active && _isPlayingAudio)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: scheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: Text(
+                          _t('$_playbackRate× 재생 중', 'Playing at $_playbackRate×'),
+                          style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                color: scheme.onPrimaryContainer,
+                                fontWeight: FontWeight.w700,
+                              ),
                         ),
                       ),
-                    ),
-                  if (item.hasTranscript) exportButton(),
-                  if (active && _isPlayingAudio)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: scheme.primaryContainer,
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: Text(
-                        _t('$_playbackRate× 재생 중', 'Playing at $_playbackRate×'),
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: scheme.onPrimaryContainer,
-                              fontWeight: FontWeight.w700,
-                            ),
-                      ),
-                    ),
-                ],
-              ),
+                  ],
+                ),
+              ],
               if (busy) ...[
                 const SizedBox(height: 10),
                 // Null (moving bar) until the first chunk reports progress.
@@ -4954,39 +5243,42 @@ class _HomeScreenState extends State<HomeScreen> {
                   value: _transcribingFraction[item.id],
                 ),
               ],
-              const SizedBox(height: 20),
-              Wrap(
-                spacing: 8,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
+              SizedBox(height: compact ? 24 : 20),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
                 children: [
                   Text(
                     _t('전사문', 'Transcript'),
-                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                   ),
-                  if (item.segments.isNotEmpty)
+                  if (item.segments.isNotEmpty) ...[
+                    const SizedBox(width: 8),
                     Text(
                       _t('${item.segments.length}개 구간', item.segments.length == 1 ? '1 segment' : '${item.segments.length} segments'),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
                             color: scheme.onSurfaceVariant,
                           ),
                     ),
-                  if (item.segments.isNotEmpty)
-                    Text(
-                      _t('시간을 누르면 해당 위치에서 재생됩니다.',
-                          Platform.isAndroid || Platform.isIOS
-                              ? 'Tap a timestamp to play from that point.'
-                              : 'Click a timestamp to play from that point.'),
-                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                    ),
+                  ],
                 ],
               ),
+              if (item.segments.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  _t('시간을 누르면 해당 위치에서 재생됩니다.',
+                      Platform.isAndroid || Platform.isIOS
+                          ? 'Tap a timestamp to play from that point.'
+                          : 'Click a timestamp to play from that point.'),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: scheme.onSurfaceVariant,
+                      ),
+                ),
+              ],
               const SizedBox(height: 8),
-              _buildTranscript(item),
+              _buildTranscript(item, compact: compact),
             ],
           ),
         );
@@ -5012,8 +5304,14 @@ class _HomeScreenState extends State<HomeScreen> {
     bool dragSelection = false,
   }) {
     final scheme = Theme.of(context).colorScheme;
-    final selected = _selectedRecordingId == item.id;
+    // Phones open details in a sheet, so no row stays highlighted there; rows
+    // run edge to edge with a hairline between them.
+    final phone = MediaQuery.sizeOf(context).width < 920;
+    final selected = !phone && _selectedRecordingId == item.id;
     final selectedForBatch = _batchSelectedIds.contains(item.id);
+    final transcriptLine = phone && item.hasTranscript
+        ? item.transcript!.trim().split('\n').first
+        : null;
     final playing = _activePlayback?.id == item.id && _isPlayingAudio;
     final duration =
         item.durationMs > 0 ? formatDuration(item.duration) : '--:--';
@@ -5041,31 +5339,40 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
+    final radius = BorderRadius.circular(phone ? 0 : 12);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(9, 3, 9, 3),
+      padding: phone ? EdgeInsets.zero : const EdgeInsets.fromLTRB(9, 3, 9, 3),
       child: Material(
         color: selectedForBatch
             ? scheme.primaryContainer
             : selected
                 ? scheme.primaryContainer.withValues(alpha: 0.52)
                 : Colors.transparent,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: radius,
         child: InkWell(
           onTap: handleTap,
           onLongPress: dragSelection ? null : handleLongPress,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: radius,
           child: Container(
             constraints: BoxConstraints(
-              minHeight: searchPreview == null ? 68 : 92,
+              minHeight: searchPreview == null ? (phone ? 76 : 68) : 92,
             ),
-            padding: const EdgeInsets.fromLTRB(9, 8, 9, 8),
+            padding: phone
+                ? const EdgeInsets.fromLTRB(12, 10, 4, 10)
+                : const EdgeInsets.fromLTRB(9, 8, 9, 8),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: selectedForBatch || selected
-                    ? scheme.primary.withValues(alpha: 0.42)
-                    : Colors.transparent,
-              ),
+              borderRadius: phone ? null : radius,
+              border: phone
+                  ? Border(
+                      bottom: BorderSide(
+                        color: scheme.outlineVariant.withValues(alpha: 0.6),
+                      ),
+                    )
+                  : Border.all(
+                      color: selectedForBatch || selected
+                          ? scheme.primary.withValues(alpha: 0.42)
+                          : Colors.transparent,
+                    ),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -5075,6 +5382,22 @@ class _HomeScreenState extends State<HomeScreen> {
                     value: selectedForBatch,
                     onChanged: (_) => _toggleBatchSelection(item),
                     visualDensity: VisualDensity.compact,
+                  )
+                else if (phone)
+                  IconButton.filledTonal(
+                    tooltip: playing
+                        ? _t('일시정지', 'Pause')
+                        : _t('재생', 'Play'),
+                    onPressed:
+                        _isRecording || item.isDeleted ? null : () => _togglePlayback(item),
+                    icon: Icon(
+                      item.isDeleted
+                          ? Icons.delete_outline_rounded
+                          : playing
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                      size: 22,
+                    ),
                   )
                 else
                   IconButton(
@@ -5109,9 +5432,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               _title(item),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodyMedium
+                              style: (phone
+                                      ? Theme.of(context).textTheme.bodyLarge
+                                      : Theme.of(context).textTheme.bodyMedium)
                                   ?.copyWith(
                                     fontWeight: selected || selectedForBatch
                                         ? FontWeight.w800
@@ -5141,6 +5464,17 @@ class _HomeScreenState extends State<HomeScreen> {
                               color: scheme.onSurfaceVariant,
                             ),
                       ),
+                      if (searchPreview == null && transcriptLine != null) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          transcriptLine,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: scheme.onSurfaceVariant,
+                              ),
+                        ),
+                      ],
                       if (searchPreview != null) ...[
                         const SizedBox(height: 5),
                         Row(
@@ -6066,25 +6400,21 @@ class _HomeScreenState extends State<HomeScreen> {
         MobileScopeTab(
           scope: 'all',
           label: _t('전체', 'All'),
-          icon: Icons.folder_open_rounded,
           count: activeCount,
         ),
         MobileScopeTab(
           scope: 'favorites',
           label: _t('즐겨찾기', 'Favorites'),
-          icon: Icons.star_outline_rounded,
           count: favoriteCount,
         ),
         MobileScopeTab(
           scope: 'collections',
           label: _t('보관함', 'Collections'),
-          icon: Icons.folder_copy_outlined,
           count: _collections.length,
         ),
         MobileScopeTab(
           scope: 'trash',
           label: _t('휴지통', 'Trash'),
-          icon: Icons.delete_outline_rounded,
           count: trashCount,
         ),
       ],
@@ -6166,8 +6496,7 @@ class _HomeScreenState extends State<HomeScreen> {
     // when a search left no results rebuilt the search field, which dropped
     // the keyboard after the first letter.
     final header = Column(children: [
-      _buildSidebarHeader(),
-      Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
+      _buildSidebarHeader(compact: true),
       if (items.isEmpty) _buildEmptyState(searchEmpty: _query.isNotEmpty),
     ]);
     return DragSelectionList(
@@ -6285,27 +6614,6 @@ class _HomeScreenState extends State<HomeScreen> {
           headerSliverBuilder: (context, innerBoxIsScrolled) => [
             SliverToBoxAdapter(child: Column(children: [
               _buildTopBar(),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
-              child: SegmentedButton<_WorkspaceView>(
-                segments: [
-                  ButtonSegment(
-                    value: _WorkspaceView.records,
-                    icon: const Icon(Icons.folder_open_rounded),
-                    label: Text(_t('기록', 'Records')),
-                  ),
-                  ButtonSegment(
-                    value: _WorkspaceView.calendar,
-                    icon: const Icon(Icons.calendar_month_rounded),
-                    label: Text(_t('캘린더', 'Calendar')),
-                  ),
-                ],
-                selected: {_workspaceView},
-                onSelectionChanged: (value) {
-                  setState(() => _workspaceView = value.first);
-                },
-              ),
-            ),
             _buildMobileScopeSelector(),
             ])),
           ],
@@ -6522,7 +6830,11 @@ class _HomeScreenState extends State<HomeScreen> {
           _closeCollectionFolder();
         }
       },
-      child: Scaffold(body: body),
+      child: Scaffold(
+        body: body,
+        bottomNavigationBar:
+            MediaQuery.sizeOf(context).width < 920 ? _buildMobileDock() : null,
+      ),
     );
 
     if (Platform.isAndroid) {
