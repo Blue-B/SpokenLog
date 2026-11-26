@@ -1158,6 +1158,30 @@ void main() {
     expect(find.text('아직 저장된 녹음이 없습니다.'), findsNothing);
   });
 
+  testWidgets('Android back closes an open collection before the app',
+      (tester) async {
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester,
+        recording: FakeRecordingService([buildItem(wavPath)], collections: [
+          RecordingCollection(id: 'c1', name: 'Meetings', createdAt: DateTime(2026)),
+        ]),
+        settings: FakeSettingsService(), player: player);
+
+    await tester.tap(find.text('보관함').first);
+    await tester.pump();
+    await tester.tap(find.text('Meetings').first);
+    await tester.pump();
+    expect(find.text('이 보관함은 비어 있습니다.'), findsOneWidget);
+
+    // System back: the folder closes and the app stays.
+    final handled = await tester.binding.handlePopRoute();
+    await tester.pump();
+    expect(handled, isTrue);
+    expect(find.text('이 보관함은 비어 있습니다.'), findsNothing);
+    expect(find.text('Meetings'), findsWidgets);
+  });
+
   testWidgets('phone search keeps focus when a letter leaves no results',
       (tester) async {
     final recording = FakeRecordingService([buildItem(wavPath)]);

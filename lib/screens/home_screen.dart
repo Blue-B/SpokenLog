@@ -6510,7 +6510,20 @@ class _HomeScreenState extends State<HomeScreen> {
           )
         : mainContent;
 
-    final content = Scaffold(body: body);
+    final content = PopScope(
+      // Android back first leaves selection or an open collection folder,
+      // like the on-screen back arrow, instead of closing the app.
+      canPop: !_selectionMode && !_collectionFolderOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        if (_selectionMode) {
+          _clearBatchSelection();
+        } else if (_collectionFolderOpen) {
+          _closeCollectionFolder();
+        }
+      },
+      child: Scaffold(body: body),
+    );
 
     if (Platform.isAndroid) {
       return WithForegroundTask(child: content);
