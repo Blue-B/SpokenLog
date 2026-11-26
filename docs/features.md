@@ -37,7 +37,7 @@ Imported files are copied into the library. The original file is not modified or
 | Engine | Where it runs | Notes |
 | --- | --- | --- |
 | SenseVoiceSmall INT8 | On your device | Korean, English, Chinese, Japanese and Cantonese; includes timestamps. About 239 MB. See the [Windows fix and testing limits](installation.md#known-issues). |
-| Whisper Multilingual INT8 (Tiny, Base, Small; Turbo on PCs) | On your device | 99 languages except Cantonese. Choose the size in settings: Tiny about 104 MB (fastest), Base about 161 MB, Small about 375 MB, and on Windows and macOS Turbo about 1.04 GB (most accurate, about as fast as Small on a PC; not offered on phones). See [Choosing a transcription engine](../README.md#choosing-a-transcription-engine). The published models give no word times, so subtitle lines come from pauses in the audio (see [Export formats](#export-formats)). |
+| Whisper Multilingual INT8 (Tiny, Base, Small; Turbo on PCs) | On your device | 99 languages except Cantonese. Choose the size in settings: Tiny about 104 MB (fastest), Base about 161 MB, Small about 375 MB, and on Windows and macOS Turbo about 1.04 GB (most accurate, and faster than Small on a PC; not offered on phones). See [Choosing a transcription engine](../README.md#choosing-a-transcription-engine). The published models give no word times, so subtitle lines come from pauses in the audio (see [Export formats](#export-formats)). |
 | Groq | Cloud | Whisper Large V3 or Large V3 Turbo, using your own API key. |
 | Cloudflare Workers AI | Cloud | Whisper Large V3 Turbo, using your own credentials. |
 

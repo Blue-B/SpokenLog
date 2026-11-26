@@ -31,22 +31,13 @@ Local transcription keeps audio on your device. Cloud transcription uploads audi
 
 ## Choosing a transcription engine
 
-![Which engine to use on Android, iPhone, Windows and macOS](docs/images/models-by-platform.svg)
+![Speech models compared on Korean speech: accuracy and speed, and where each runs](docs/images/models-by-platform.svg)
 
-- **Phones:** SenseVoice. It is the fastest and handles Korean well; it does not add punctuation.
-- **PCs:** Whisper Turbo. In our test it was as fast as Whisper Small and the most accurate.
-- **Cloud** (Groq, Cloudflare) is faster still, but the audio is uploaded to that provider.
+- **Phones (Android, iPhone):** SenseVoice. It is the fastest and makes few mistakes; it adds no punctuation. Whisper Small is a little more accurate but about four times slower.
+- **PCs (Windows, macOS):** Whisper Turbo. It made the fewest mistakes and takes about 17 seconds per minute of audio.
+- **Online:** Groq runs Whisper Large V3 with your own free key. The audio is uploaded to Groq.
 
-One 30-second Korean clip on a 10-core PC:
-
-| Engine | Time | Result |
-| --- | --- | --- |
-| SenseVoice | 3 s | No punctuation; 2 words wrong |
-| Whisper Small | 17 s | 2 words wrong |
-| Whisper Turbo | 17 s | Exact |
-| Whisper Large V3 (not offered) | 92 s | 2 words wrong |
-
-This is a single synthetic-voice sample, not a benchmark; real recordings vary. On phones, expect several times longer.
+Choosing an on-device model in **Settings > How to transcribe** downloads it then. The figures come from one synthetic voice reading ten sentences, not a public benchmark; real recordings vary.
 
 ## AI connection (MCP)
 
