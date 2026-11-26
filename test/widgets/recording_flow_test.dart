@@ -1188,8 +1188,9 @@ void main() {
     expect(find.text('Meetings'), findsWidgets);
   });
 
+  // The share button is hidden on Windows, which has no system share sheet.
   testWidgets('phone share offers text, timed text, and audio with timed text',
-      (tester) async {
+      skip: Platform.isWindows, (tester) async {
     final player = FakeAudioPlayer();
     addTearDown(player.dispose);
     await pumpHome(tester,
