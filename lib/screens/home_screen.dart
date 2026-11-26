@@ -6159,16 +6159,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildMobileRecordsList(List<RecordingItem> items) {
+    // One list whether or not anything matches: switching to another widget
+    // when a search left no results rebuilt the search field, which dropped
+    // the keyboard after the first letter.
     final header = Column(children: [
       _buildSidebarHeader(),
       Divider(height: 1, color: Theme.of(context).colorScheme.outlineVariant),
+      if (items.isEmpty) _buildEmptyState(searchEmpty: _query.isNotEmpty),
     ]);
-    if (items.isEmpty) {
-      return ListView(children: [
-        header,
-        _buildEmptyState(searchEmpty: _query.isNotEmpty),
-      ]);
-    }
     return DragSelectionList(
       primary: true,
       header: header,

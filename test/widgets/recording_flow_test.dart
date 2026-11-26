@@ -1144,4 +1144,28 @@ void main() {
     expect(player.disposed, isTrue);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('phone search keeps focus when a letter leaves no results',
+      (tester) async {
+    final recording = FakeRecordingService([buildItem(wavPath)]);
+    final player = FakeAudioPlayer();
+    addTearDown(player.dispose);
+    await pumpHome(tester, recording: recording,
+        settings: FakeSettingsService(), player: player);
+
+    final field = find.byType(TextField).first;
+    await tester.tap(field);
+    await tester.pump();
+    // One letter that matches nothing empties the list.
+    await tester.enterText(field, 'ㅎ');
+    await tester.pump();
+    expect(find.text('First clip'), findsNothing);
+
+    final editable = tester.widget<EditableText>(find.byType(EditableText).first);
+    expect(editable.focusNode.hasFocus, isTrue,
+        reason: 'the search field must keep the keyboard for the next letter');
+    await tester.enterText(find.byType(TextField).first, 'ㅎㅎ');
+    await tester.pump();
+    expect(find.text('ㅎㅎ'), findsOneWidget);
+  });
 }
