@@ -28,6 +28,25 @@ String formatRecordingDate(DateTime value) {
       '${two(value.hour)}:${two(value.minute)}';
 }
 
+/// Short list date: "오늘 16:53", "어제 09:10", "11월 24일", "2025.12.31".
+String formatShortDate(DateTime value, {required DateTime now, bool english = false}) {
+  String two(int n) => n.toString().padLeft(2, '0');
+  final time = '${two(value.hour)}:${two(value.minute)}';
+  final day = DateTime(value.year, value.month, value.day);
+  final today = DateTime(now.year, now.month, now.day);
+  final days = today.difference(day).inDays;
+  if (days == 0) return english ? 'Today $time' : '오늘 $time';
+  if (days == 1) return english ? 'Yesterday $time' : '어제 $time';
+  if (value.year == now.year) {
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return english
+        ? '${months[value.month - 1]} ${value.day}'
+        : '${value.month}월 ${value.day}일';
+  }
+  return '${value.year}.${two(value.month)}.${two(value.day)}';
+}
+
 String formatFileSize(int bytes) {
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1024 * 1024) {

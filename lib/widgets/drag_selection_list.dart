@@ -12,6 +12,7 @@ class DragSelectionList extends StatefulWidget {
     required this.itemBuilder,
     this.header,
     this.primary = false,
+    this.padding = const EdgeInsets.symmetric(vertical: 5),
   });
   final List<String> ids;
   final Set<String> selected;
@@ -19,6 +20,7 @@ class DragSelectionList extends StatefulWidget {
   final IndexedWidgetBuilder itemBuilder;
   final Widget? header;
   final bool primary;
+  final EdgeInsets padding;
 
   @override
   State<DragSelectionList> createState() => _DragSelectionListState();
@@ -120,7 +122,7 @@ class _DragSelectionListState extends State<DragSelectionList> {
   Widget build(BuildContext context) => ListView.builder(
     key: _viewport,
     controller: _scroll,
-    padding: const EdgeInsets.symmetric(vertical: 5),
+    padding: widget.padding,
     itemCount: widget.ids.length + (widget.header == null ? 0 : 1),
     itemBuilder: (context, index) {
       if (widget.header != null) {

@@ -1064,7 +1064,10 @@ void main() {
       recording: FakeRecordingService([buildItem(wavPath)]),
       settings: settings, player: player,
       size: const Size(640, 360), textScale: 1.5);
-    await tester.tap(find.byTooltip('Change speech recognition'));
+    await openRecordingDetails(tester);
+    await tester.ensureVisible(find.text('Transcription settings'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Transcription settings'));
     await tester.pumpAndSettle();
     expect(find.text('Quick speech settings'), findsOneWidget);
     expect(find.text('자동 감지'), findsNothing);

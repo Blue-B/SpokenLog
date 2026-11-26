@@ -33,4 +33,13 @@ void main() {
       expect(formatFileSize(2 * 1024 * 1024), '2.0 MB');
     });
   });
+
+  test('formatShortDate says today, yesterday, a day this year, or the full date', () {
+    final now = DateTime(2026, 11, 26, 18);
+    expect(formatShortDate(DateTime(2026, 11, 26, 9, 5), now: now), '오늘 09:05');
+    expect(formatShortDate(DateTime(2026, 11, 25, 23, 59), now: now), '어제 23:59');
+    expect(formatShortDate(DateTime(2026, 3, 4), now: now), '3월 4일');
+    expect(formatShortDate(DateTime(2026, 3, 4), now: now, english: true), 'Mar 4');
+    expect(formatShortDate(DateTime(2025, 12, 31), now: now), '2025.12.31');
+  });
 }
