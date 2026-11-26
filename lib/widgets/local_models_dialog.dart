@@ -91,7 +91,7 @@ class _LocalModelsDialogState extends State<LocalModelsDialog> {
     return PopScope(
       canPop: !busy,
       child: AlertDialog(
-        title: Text(_t('음성 모델 받기', 'Speech models')),
+        title: Text(_t('음성 모델 관리', 'Speech models')),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(
@@ -100,10 +100,10 @@ class _LocalModelsDialogState extends State<LocalModelsDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  _t('인터넷 없이 이 기기에서 글로 바꿀 때 쓰는 모델입니다. 한 번 받으면 '
-                      '계속 쓸 수 있고, 어떤 모델을 쓸지는 설정의 "글로 바꾸는 방법"에서 고릅니다.',
-                      'Used to transcribe on this device without internet. Download once; '
-                      'choose which one to use in "How speech becomes text".'),
+                  _t('인터넷 없이 이 기기에서 받아쓸 때 쓰는 모델입니다. "받아쓰기 방식"에서 '
+                      '고르면 그때 자동으로 받으니, 여기서는 미리 받아 두거나 지울 때 쓰세요.',
+                      'Used to transcribe on this device without internet. Choosing one in '
+                      '"How to transcribe" downloads it then; use this to download ahead or delete.'),
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall

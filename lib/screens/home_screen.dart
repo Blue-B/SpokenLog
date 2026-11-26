@@ -1328,7 +1328,7 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  _t('빠른 음성 인식 설정', 'Quick speech settings'),
+                  _t('빠른 받아쓰기 설정', 'Quick speech settings'),
                   style: Theme.of(sheetContext).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
@@ -1348,7 +1348,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   value: provider,
                   isExpanded: true,
                   decoration: InputDecoration(
-                    labelText: _t('음성 인식 방식', 'Speech recognition'),
+                    labelText: _t('받아쓰기 방식', 'Speech recognition'),
                     prefixIcon: Icon(
                       provider.isLocal
                           ? Icons.computer_rounded
@@ -2057,7 +2057,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               if (!dialogContext.mounted) return;
               setLocalState(() => diarizationInstalled = true);
-              notice(_t('로컬 화자 구분 모델 설치가 완료되었습니다.', 'Local speaker models installed.'));
+              notice(_t('화자 구분 모델을 받았습니다.', 'Speaker model downloaded.'));
             } catch (e) {
               notice(
                 '화자 구분 모델 다운로드에 실패했습니다: $e',
@@ -2135,7 +2135,7 @@ class _HomeScreenState extends State<HomeScreen> {
             final card = Material(
               color: selected
                   ? scheme.primaryContainer.withValues(alpha: 0.55)
-                  : scheme.surfaceContainerLow,
+                  : scheme.surface,
               borderRadius: BorderRadius.circular(12),
               child: InkWell(
                 onTap: isDownloading
@@ -2292,6 +2292,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   provider = value;
                   obscureKey = true;
                 });
+                // Choosing an on-device model fetches it right away.
+                if (value.isLocal && !localInstalled(value) && !isDownloading) {
+                  unawaited(installLocalModel(value));
+                }
               },
             );
           }
@@ -2357,8 +2361,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         child: Text(
                           installed
-                              ? _t('${provider.shortLabel} 모델이 설치되어 있습니다.', '${provider.shortLabel} is installed.')
-                              : _t('${provider.shortLabel} 모델 다운로드가 필요합니다 · $sizeLabel', 'Download ${provider.shortLabel} · $sizeLabel'),
+                              ? _t('${provider.shortLabel} 모델이 준비되어 있습니다.', '${provider.shortLabel} is installed.')
+                              : downloading
+                                  ? _t('${provider.shortLabel} 모델 받는 중 · $sizeLabel', 'Downloading ${provider.shortLabel} · $sizeLabel')
+                                  : _t('${provider.shortLabel} 모델을 받아야 합니다 · $sizeLabel', 'Download ${provider.shortLabel} · $sizeLabel'),
                           style:
                               Theme.of(dialogContext).textTheme.bodyMedium,
                         ),
@@ -2386,7 +2392,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? null
                               : () => installLocalModel(provider),
                           icon: const Icon(Icons.download_rounded),
-                          label: Text(_t('모델 다운로드', 'Download model')),
+                          label: Text(_t('모델 받기', 'Download model')),
                         ),
                       if (installed)
                         OutlinedButton.icon(
@@ -2394,7 +2400,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? null
                               : () => deleteLocalModel(provider),
                           icon: const Icon(Icons.delete_outline_rounded),
-                          label: Text(_t('모델 삭제', 'Remove model')),
+                          label: Text(_t('모델 지우기', 'Remove model')),
                         ),
                     ],
                   ),
@@ -2417,16 +2423,21 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: SwitchListTile(
                       value: diarizationEnabled,
                       contentPadding: EdgeInsets.zero,
-                      title: Text(_t('말한 사람 나누기', 'Separate speakers')),
-                      subtitle: Text(_t(
-                        '여러 사람이 말한 녹음을 화자 1, 화자 2로 나눠 보여줍니다.',
-                        'Shows who spoke as Speaker 1, Speaker 2.')),
+                      title: Text(_t('화자 구분', 'Speaker separation')),
+                      subtitle: Text(diarizationInstalled
+                          ? _t('여러 사람이 말하면 화자 1, 화자 2로 나눠 보여줍니다.',
+                              'Shows who spoke as Speaker 1, Speaker 2.')
+                          : _t('켜면 화자 구분 모델(약 42MB)을 한 번 받습니다.',
+                              'Turning it on downloads the speaker model once (about 42 MB).')),
                       onChanged: isDownloading
                           ? null
                           : (value) {
                               setLocalState(() {
                                 diarizationEnabled = value;
                               });
+                              if (value && !diarizationInstalled) {
+                                unawaited(installDiarizationModel());
+                              }
                             },
                     ),
                   ),
@@ -2478,14 +2489,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           onPressed:
                               isDownloading ? null : installDiarizationModel,
                           icon: const Icon(Icons.download_rounded),
-                          label: Text(_t('모델 다운로드', 'Download model')),
+                          label: Text(_t('모델 받기', 'Download model')),
                         ),
                       if (diarizationInstalled)
                         OutlinedButton.icon(
                           onPressed:
                               isDownloading ? null : deleteDiarizationModel,
                           icon: const Icon(Icons.delete_outline_rounded),
-                          label: Text(_t('모델 삭제', 'Remove model')),
+                          label: Text(_t('모델 지우기', 'Remove model')),
                         ),
                       SizedBox(
                         width: 190,
@@ -2548,7 +2559,7 @@ class _HomeScreenState extends State<HomeScreen> {
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_t('음성 인식 설정', 'Speech recognition settings')),
+                Text(_t('받아쓰기 설정', 'Transcription settings')),
                 if (settingsNotice != null) ...[
                   const SizedBox(height: 8),
                   Semantics(
@@ -2565,7 +2576,7 @@ class _HomeScreenState extends State<HomeScreen> {
               height: compactSettings ? compactContentHeight : 700,
               child: Scrollbar(
                 controller: settingsScrollController,
-                thumbVisibility: compactSettings,
+                thumbVisibility: false,
                 child: SingleChildScrollView(
                   controller: settingsScrollController,
                   primary: false,
@@ -2621,7 +2632,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      _t('어디서 글로 바꿀까요?', 'Where should it run?'),
+                      _t('어디서 받아쓸까요?', 'Where should it run?'),
                       style: Theme.of(dialogContext)
                           .textTheme
                           .titleSmall
@@ -6865,7 +6876,7 @@ class _SttProviderCard extends StatelessWidget {
     final status = !supported
         ? _t('지금 고른 녹음 언어는 지원하지 않아요', "Doesn't support the chosen language")
         : installed == false
-            ? _t('처음 한 번 모델을 받아야 해요', 'Needs a one-time download')
+            ? _t('고르면 모델을 한 번 받아요', 'Choosing it downloads the model once')
             : null;
 
     return Material(

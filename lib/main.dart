@@ -137,6 +137,15 @@ class SpokenLogApp extends StatelessWidget {
       snackBarTheme: const SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
       ),
+      // White like the settings sheet, not Material's grey-tinted default.
+      dialogTheme: DialogThemeData(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.surface,
+        surfaceTintColor: Colors.transparent,
+      ),
     );
   }
 

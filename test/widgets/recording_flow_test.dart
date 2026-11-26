@@ -480,7 +480,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AppSettingsSheet), findsNothing);
       expect(find.widgetWithText(AlertDialog,
-          english ? 'Speech recognition settings' : '음성 인식 설정'), findsOneWidget);
+          english ? 'Transcription settings' : '받아쓰기 설정'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }

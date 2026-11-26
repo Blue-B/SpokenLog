@@ -30,7 +30,7 @@ class AppSettingsSheet extends StatelessWidget {
   final VoidCallback? onLicenses;
   final VoidCallback? onAiConnection;
 
-  /// e.g. "On this phone · SenseVoice · Auto detect".
+  /// e.g. "This phone · SenseVoice · Auto detect".
   final String? speechSummary;
 
   /// The app's display language, e.g. "한국어".
@@ -119,21 +119,21 @@ class AppSettingsSheet extends StatelessWidget {
           Expanded(
             child: ListView(
               children: [
-                heading(_t('음성을 글로 바꾸기', 'Speech to text')),
+                heading(_t('음성 받아쓰기', 'Transcription')),
                 entry('settings-transcription', Icons.record_voice_over_outlined,
-                    _t('글로 바꾸는 방법', 'How speech becomes text'),
+                    _t('받아쓰기 방식', 'How to transcribe'),
                     speechSummary ??
-                        _t('어디서 처리할지, 녹음 언어, 말한 사람 나누기',
+                        _t('어디서 받아쓸지, 녹음 언어, 화자 구분',
                             'Where it runs, spoken language, speakers'),
                     onTranscription),
                 entry('settings-local-models', Icons.download_for_offline_outlined,
-                    _t('음성 모델 받기', 'Speech models'),
-                    _t('인터넷 없이 쓰려면 한 번 받아 두세요',
-                        'Download once to work without internet'),
+                    _t('음성 모델 관리', 'Speech models'),
+                    _t('미리 받아 두거나 지우기',
+                        'Download ahead or delete'),
                     onLocalModels),
                 heading(
                   _t('온라인 서비스 (선택)', 'Online services (optional)'),
-                  _t('기기에서 처리한다면 연결하지 않아도 됩니다.',
+                  _t('기기에서 받아쓴다면 연결하지 않아도 됩니다.',
                       'Not needed if you transcribe on this device.'),
                 ),
                 entry('settings-groq', Icons.bolt_rounded, 'Groq',

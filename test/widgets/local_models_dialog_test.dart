@@ -23,7 +23,7 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('음성 모델 받기'), findsOneWidget);
+    expect(find.text('음성 모델 관리'), findsOneWidget);
     expect(find.text('온라인으로 처리'), findsNothing);
 
     await tester.tap(find.text('받기'));
