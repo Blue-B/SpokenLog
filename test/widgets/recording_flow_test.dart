@@ -460,8 +460,11 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(AppSettingsSheet), findsOneWidget);
       final language = find.byKey(const ValueKey('settings-display-language'));
+      final speech = find.byKey(const ValueKey('settings-transcription'));
       final cloud = find.byKey(const ValueKey('settings-groq'));
-      expect(tester.getTopLeft(language).dy, lessThan(tester.getTopLeft(cloud).dy));
+      // Speech first, optional online services next, app settings last.
+      expect(tester.getTopLeft(speech).dy, lessThan(tester.getTopLeft(cloud).dy));
+      expect(tester.getTopLeft(cloud).dy, lessThan(tester.getTopLeft(language).dy));
       await tester.tap(language);
       await tester.pumpAndSettle();
       expect(find.widgetWithText(AlertDialog, languageLabel), findsOneWidget);
@@ -537,9 +540,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Recording language'), findsOneWidget);
     expect(find.text('Auto detect'), findsWidgets);
-    expect(find.text('Process on this device'), findsOneWidget);
+    expect(find.text('On this computer'), findsOneWidget);
     expect(find.text('Save settings'), findsOneWidget);
-    expect(find.text('Processing mode'), findsOneWidget);
+    expect(find.text('Where should it run?'), findsOneWidget);
     expect(find.text('Cancel'), findsOneWidget);
     final texts = tester.widgetList<Text>(find.descendant(
         of: find.byType(AlertDialog), matching: find.byType(Text)))
@@ -943,11 +946,11 @@ void main() {
     final list = find.descendant(
         of: find.byType(AppSettingsSheet), matching: find.byType(Scrollable));
     for (final key in const [
-      'settings-display-language',
-      'settings-local-models',
       'settings-transcription',
+      'settings-local-models',
       'settings-groq',
       'settings-cloudflare',
+      'settings-display-language',
     ]) {
       await tester.scrollUntilVisible(find.byKey(ValueKey(key)), 100,
           scrollable: list.first);

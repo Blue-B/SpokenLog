@@ -23,20 +23,20 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('로컬 모델 관리'), findsOneWidget);
+    expect(find.text('음성 모델 받기'), findsOneWidget);
     expect(find.text('온라인으로 처리'), findsNothing);
 
-    await tester.tap(find.text('다운로드'));
+    await tester.tap(find.text('받기'));
     await tester.pumpAndSettle();
     expect(installed, isTrue);
-    expect(find.text('설치됨'), findsOneWidget);
+    expect(find.text('받음'), findsOneWidget);
     expect(find.text('약 239MB'), findsOneWidget);
 
-    await tester.tap(find.text('삭제'));
+    await tester.tap(find.text('지우기'));
     await tester.pumpAndSettle();
     expect(installed, isFalse);
-    expect(find.text('다운로드'), findsOneWidget);
-    expect(find.text('설치됨'), findsNothing);
+    expect(find.text('받기'), findsOneWidget);
+    expect(find.text('받음'), findsNothing);
   });
 
   testWidgets('a narrow phone dialog keeps the description on full-width lines',
@@ -60,7 +60,7 @@ void main() {
     await tester.pumpAndSettle();
 
     final text = tester.getRect(find.text(description));
-    final button = tester.getRect(find.text('다운로드'));
+    final button = tester.getRect(find.text('받기'));
     expect(button.top, greaterThan(text.bottom)); // button sits below, not beside
     expect(text.height, lessThan(60)); // at most a few lines, not a squeezed column
     expect(tester.takeException(), isNull);

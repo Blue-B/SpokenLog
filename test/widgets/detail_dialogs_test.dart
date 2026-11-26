@@ -319,7 +319,7 @@ void main() {
 
       expect(find.text('Settings'), findsOneWidget);
       expect(find.text('Display language'), findsOneWidget);
-      expect(find.text('Local models'), findsOneWidget);
+      expect(find.text('Speech models'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -374,13 +374,13 @@ void main() {
         textScale: 1.8,
       );
 
-      expect(find.byKey(const ValueKey('settings-display-language')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-transcription')), findsOneWidget);
       expect(tester.takeException(), isNull);
       await tester.scrollUntilVisible(
-        find.byKey(const ValueKey('settings-groq')), 200,
+        find.byKey(const ValueKey('settings-display-language')), 200,
         scrollable: find.byType(Scrollable),
       );
-      expect(find.byKey(const ValueKey('settings-groq')), findsOneWidget);
+      expect(find.byKey(const ValueKey('settings-display-language')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

@@ -117,6 +117,9 @@ class _HomeScreenState extends State<HomeScreen> {
   DateTime _calendarMonth = DateTime(DateTime.now().year, DateTime.now().month);
   DateTime _selectedCalendarDate = DateTime.now();
   String _appLanguage = 'system';
+  // Shown on the settings list; null until checked.
+  bool? _groqConnected;
+  bool? _cloudflareConnected;
 
   final Set<String> _transcribing = <String>{};
   final Map<String, String> _transcribingProgress = <String, String>{};
@@ -1602,6 +1605,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (saved == true) {
+      unawaited(_refreshConnections());
       _refreshRecordingViews(() {});
       if (!resumeTranscription) {
         _message(_t('인증 정보를 저장했습니다.', 'Credentials saved.'));
@@ -1610,7 +1614,33 @@ class _HomeScreenState extends State<HomeScreen> {
     return saved == true;
   }
 
+  Future<void> _refreshConnections() async {
+    try {
+      final groq = await _settings.hasApiKey(TranscriptionProvider.groq);
+      final cloudflare =
+          await _settings.hasApiKey(TranscriptionProvider.cloudflare) &&
+              ((await _settings.getCloudflareAccountId())?.trim().isNotEmpty ?? false);
+      _refreshRecordingViews(() {
+        _groqConnected = groq;
+        _cloudflareConnected = cloudflare;
+      });
+    } catch (_) {}
+  }
+
+  /// "이 휴대폰 · SenseVoice · 자동 감지" for the settings list.
+  String get _speechSummary {
+    final phone = Platform.isAndroid || Platform.isIOS;
+    final place = !_provider.isLocal
+        ? _t('온라인', 'Online')
+        : phone
+            ? _t('이 휴대폰', 'This phone')
+            : _t('이 컴퓨터', 'This computer');
+    return '$place · ${_provider.shortLabel} · '
+        '${_language.displayLabel(useEnglish: _useEnglish)}';
+  }
+
   Future<void> _showAppSettings() async {
+    unawaited(_refreshConnections());
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1627,6 +1657,14 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (_, _) => !mounted || !_viewActive
                   ? const SizedBox.shrink() : AppSettingsSheet(
                 useEnglish: _useEnglish,
+                speechSummary: _speechSummary,
+                languageLabel: switch (_appLanguage) {
+                  'ko' => '한국어',
+                  'en' => 'English',
+                  _ => _t('기기 설정', 'System'),
+                },
+                groqConnected: _groqConnected,
+                cloudflareConnected: _cloudflareConnected,
                 onGroq: () => unawaited(_showCloudCredentials(TranscriptionProvider.groq)),
                 onCloudflare: () => unawaited(_showCloudCredentials(TranscriptionProvider.cloudflare)),
                 onLocalModels: () => unawaited(_showLocalModels()),
@@ -2105,7 +2143,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     : () => selectProviderMode(isLocal),
                 borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  constraints: const BoxConstraints(minHeight: 82),
+                  constraints: const BoxConstraints(minHeight: 64),
                   padding: const EdgeInsets.all(13),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
@@ -2195,17 +2233,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   modeChoice(
                     isLocal: false,
-                    title: _t('온라인으로 처리', 'Process online'),
-                    subtitle: _t('빠른 처리 · 인터넷 연결 필요', 'Fast processing · Internet required'),
+                    title: _t('온라인 서비스', 'Online service'),
+                    subtitle: _t('더 빠름 · 인터넷과 연결 키 필요', 'Faster · needs internet and a key'),
                     icon: Icons.cloud_queue_rounded,
                     expanded: false,
                   ),
                   const SizedBox(height: 8),
                   modeChoice(
                     isLocal: true,
-                    title: _t('이 기기에서 처리', 'Process on this device'),
-                    subtitle: _t('음성 외부 전송 없음 · 사용 제한 없음', 'No audio uploads · No usage quota'),
-                    icon: Icons.computer_rounded,
+                    title: (Platform.isAndroid || Platform.isIOS ? _t('이 휴대폰에서', 'On this phone') : _t('이 컴퓨터에서', 'On this computer')),
+                    subtitle: _t('무료 · 인터넷 없이 · 녹음이 밖으로 안 나감', 'Free · works offline · audio stays here'),
+                    icon: Platform.isAndroid || Platform.isIOS
+                        ? Icons.smartphone_rounded
+                        : Icons.computer_rounded,
                     expanded: false,
                   ),
                 ],
@@ -2216,16 +2256,18 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 modeChoice(
                   isLocal: false,
-                  title: _t('온라인으로 처리', 'Process online'),
-                  subtitle: _t('빠른 처리 · 인터넷 연결 필요', 'Fast processing · Internet required'),
+                  title: _t('온라인 서비스', 'Online service'),
+                  subtitle: _t('더 빠름 · 인터넷과 연결 키 필요', 'Faster · needs internet and a key'),
                   icon: Icons.cloud_queue_rounded,
                 ),
                 const SizedBox(width: 10),
                 modeChoice(
                   isLocal: true,
-                  title: _t('이 기기에서 처리', 'Process on this device'),
-                  subtitle: _t('음성 외부 전송 없음 · 사용 제한 없음', 'No audio uploads · No usage quota'),
-                  icon: Icons.computer_rounded,
+                  title: (Platform.isAndroid || Platform.isIOS ? _t('이 휴대폰에서', 'On this phone') : _t('이 컴퓨터에서', 'On this computer')),
+                  subtitle: _t('무료 · 인터넷 없이 · 녹음이 밖으로 안 나감', 'Free · works offline · audio stays here'),
+                  icon: Platform.isAndroid || Platform.isIOS
+                        ? Icons.smartphone_rounded
+                        : Icons.computer_rounded,
                 ),
               ],
             );
@@ -2279,15 +2321,8 @@ class _HomeScreenState extends State<HomeScreen> {
               );
             }
 
-            return _UsagePanel(
-              title: _t('기기에서 처리', 'On-device processing'),
-              progress: null,
-              primaryText: _t('전사 횟수와 시간 제한 없음', 'No transcription count or duration quota'),
-              secondaryText: _t(
-                  '인터넷이나 API 키 없이 기기 안에서 처리합니다. '
-                  '처리 속도는 기기 성능에 따라 달라질 수 있습니다.',
-                  'Runs on your device without internet or an API key. Speed depends on your hardware.'),
-            );
+            // On-device: nothing to explain beyond the choice itself.
+            return const SizedBox.shrink();
           }
 
           Widget localModelPanel() {
@@ -2303,13 +2338,8 @@ class _HomeScreenState extends State<HomeScreen> {
             };
             final downloading = downloadingTask == provider.id;
 
-            return Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: scheme.outlineVariant),
-              ),
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -2377,13 +2407,8 @@ class _HomeScreenState extends State<HomeScreen> {
             final downloading =
                 downloadingTask == 'speaker_diarization';
 
-            return Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: scheme.surfaceContainerLow,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: scheme.outlineVariant),
-              ),
+            return Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -2392,10 +2417,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: SwitchListTile(
                       value: diarizationEnabled,
                       contentPadding: EdgeInsets.zero,
-                      title: Text(_t('로컬 화자 구분', 'Local speaker separation')),
+                      title: Text(_t('말한 사람 나누기', 'Separate speakers')),
                       subtitle: Text(_t(
-                        'STT 엔진과 별개로 녹음에서 화자를 분리해 전사 구간에 화자 1, 화자 2처럼 표시합니다.',
-                        'Add labels such as Speaker 1 and Speaker 2 independently of the transcription engine.')),
+                        '여러 사람이 말한 녹음을 화자 1, 화자 2로 나눠 보여줍니다.',
+                        'Shows who spoke as Speaker 1, Speaker 2.')),
                       onChanged: isDownloading
                           ? null
                           : (value) {
@@ -2405,16 +2430,8 @@ class _HomeScreenState extends State<HomeScreen> {
                             },
                     ),
                   ),
-                  Text(
-                    _t('선택한 STT 엔진과 독립적으로 동작하는 별도 로컬 후처리입니다. '
-                    'Groq, Cloudflare, SenseVoice, Local Whisper처럼 시간 구간이 있는 결과에 공통 적용되며 '
-                    '음성은 화자 구분을 위해 외부 서버로 전송되지 않습니다.',
-                    'Runs locally after transcription, with no audio upload. Works with timestamped results from Groq, Cloudflare, SenseVoice and Local Whisper.'),
-                    style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
-                        ),
-                  ),
-                  const SizedBox(height: 10),
+                  if (diarizationEnabled || diarizationInstalled || downloading) ...[
+                  const SizedBox(height: 6),
                   Row(
                     children: [
                       Icon(
@@ -2430,8 +2447,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Expanded(
                         child: Text(
                           diarizationInstalled
-                              ? _t('화자 구분 모델이 설치되어 있습니다.', 'Speaker models are installed.')
-                              : _t('추가 로컬 모델 다운로드가 필요합니다 · 약 42MB', 'Additional local models required · about 42 MB'),
+                              ? _t('화자 구분 모델이 준비되어 있습니다.', 'Speaker model is ready.')
+                              : _t('화자 구분 모델을 받아야 합니다 · 약 42MB', 'Needs the speaker model · about 42 MB'),
                           style:
                               Theme.of(dialogContext).textTheme.bodySmall,
                         ),
@@ -2507,6 +2524,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
+                  ],
                 ],
               ),
             );
@@ -2540,17 +2558,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: settingsNoticeIsError ? scheme.error : scheme.primary)),
                   ),
                 ],
-                const SizedBox(height: 4),
-                Text(
-                  _t(
-                    '녹음 속 언어와 음성을 글자로 바꾸는 방법, 화자 구분 등을 설정합니다.',
-                    'Choose the recording language, how speech is converted to text, and speaker separation.',
-                  ),
-                  style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                        fontWeight: FontWeight.w400,
-                      ),
-                ),
               ],
             ),
             content: SizedBox(
@@ -2612,18 +2619,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               });
                             },
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 20),
                     Text(
-                      _t('자동 감지는 선택한 모델이 지원하는 언어 안에서 동작합니다. '
-                          '언어를 알고 있다면 직접 선택할 수 있습니다.',
-                          'Auto detection works within the selected model’s supported languages. You can also choose the spoken language explicitly.'),
-                      style: Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      _t('처리 방식', 'Processing mode'),
+                      _t('어디서 글로 바꿀까요?', 'Where should it run?'),
                       style: Theme.of(dialogContext)
                           .textTheme
                           .titleSmall
@@ -2632,22 +2630,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     const SizedBox(height: 8),
                     modeSelector(),
                     const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        Text(
-                          showLocalProviders ? _t('기기 내 모델', 'Local models') : _t('온라인 서비스', 'Cloud services'),
-                          style: Theme.of(dialogContext)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(width: 8),
-                        _SttMiniBadge(
-                          text: showLocalProviders
-                              ? _t('기기 안에서 처리', 'On device')
-                              : _t('인터넷으로 처리', 'Online'),
-                        ),
-                      ],
+                    Text(
+                      showLocalProviders
+                          ? _t('사용할 음성 모델', 'Speech model')
+                          : _t('사용할 서비스', 'Service'),
+                      style: Theme.of(dialogContext)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 8),
                     for (final value in _availableProviders
@@ -2848,15 +2838,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       const SizedBox(height: 10),
                       localModelPanel(),
                     ],
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 16),
+                    const Divider(height: 1),
+                    const SizedBox(height: 8),
                     diarizationPanel(),
                     const SizedBox(height: 12),
                     Text(
                       provider.isLocal
-                          ? _t('로컬 전사는 원본 WAV를 기기 안에서 처리합니다.', 'Local transcription processes the original WAV on your device.')
-                          : _t('클라우드 전사는 전사 버튼을 누른 경우에만 녹음 파일을 선택한 서비스로 전송합니다. '
-                              '인증 정보는 OS 보안 저장소에 저장됩니다.',
-                              'Cloud transcription uploads audio only when you start it. Credentials are stored in OS secure storage.'),
+                          ? _t('녹음은 이 기기 밖으로 나가지 않습니다.', 'Recordings never leave this device.')
+                          : _t('전사 버튼을 누를 때만 녹음이 이 서비스로 보내집니다.',
+                              'Audio is sent to this service only when you transcribe.'),
                       style:
                           Theme.of(dialogContext).textTheme.bodySmall?.copyWith(
                                 color: scheme.onSurfaceVariant,
@@ -2941,6 +2932,7 @@ class _HomeScreenState extends State<HomeScreen> {
     groqController.dispose();
     cloudflareTokenController.dispose();
     cloudflareAccountController.dispose();
+    unawaited(_refreshConnections());
   }
 
   Future<void> _rename(RecordingItem item) async {
@@ -6840,144 +6832,106 @@ class _SttProviderCard extends StatelessWidget {
   final bool enabled;
   final VoidCallback onTap;
 
-  IconData get _icon => switch (provider) {
-        TranscriptionProvider.spokenlogCloud => Icons.auto_awesome_rounded,
-        TranscriptionProvider.groq => Icons.bolt_rounded,
-        TranscriptionProvider.cloudflare => Icons.cloud_outlined,
-        TranscriptionProvider.localSenseVoice => Icons.speed_rounded,
-        TranscriptionProvider.localWhisper => Icons.language_rounded,
-      };
+  /// One plain line: what it is good at and what it needs.
+  String get _summary {
+    final phone = Platform.isAndroid || Platform.isIOS;
+    return switch (provider) {
+      TranscriptionProvider.spokenlogCloud =>
+        _t('광고를 보면 무료 · 빠르고 정확함', 'Free with ads · fast and accurate'),
+      TranscriptionProvider.groq =>
+        _t('빠르고 정확함 · 무료 키 필요', 'Fast and accurate · needs a free key'),
+      TranscriptionProvider.cloudflare =>
+        _t('하루 무료 사용량 · 계정 정보 필요', 'Free daily allowance · needs account details'),
+      TranscriptionProvider.localSenseVoice =>
+        _t('가장 빠름 · 한국어·영어·중국어·일본어', 'Fastest · Korean, English, Chinese, Japanese'),
+      TranscriptionProvider.localWhisper => phone
+          ? _t('여러 나라 말 · 휴대폰에서는 느림', 'Many languages · slow on phones')
+          : _t('여러 나라 말 · Turbo가 가장 정확함', 'Many languages · Turbo is the most accurate'),
+    };
+  }
+
+  bool get _recommended {
+    final phone = Platform.isAndroid || Platform.isIOS;
+    return provider == TranscriptionProvider.groq ||
+        provider == (phone
+            ? TranscriptionProvider.localSenseVoice
+            : TranscriptionProvider.localWhisper);
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
+    final text = Theme.of(context).textTheme;
+    final status = !supported
+        ? _t('지금 고른 녹음 언어는 지원하지 않아요', "Doesn't support the chosen language")
+        : installed == false
+            ? _t('처음 한 번 모델을 받아야 해요', 'Needs a one-time download')
+            : null;
 
     return Material(
-      color: !supported
-          ? scheme.surfaceContainerLow.withValues(alpha: 0.55)
-          : selected
-              ? scheme.primaryContainer.withValues(alpha: 0.55)
-              : scheme.surfaceContainerLow,
+      color: selected && supported
+          ? scheme.primaryContainer.withValues(alpha: 0.45)
+          : Colors.transparent,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
         onTap: enabled && supported ? onTap : null,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.all(13),
+          padding: const EdgeInsets.fromLTRB(10, 12, 14, 12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: selected && supported
-                  ? scheme.primary
-                  : scheme.outlineVariant,
+              color: selected && supported ? scheme.primary : scheme.outlineVariant,
               width: selected && supported ? 1.5 : 1,
             ),
           ),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 38,
-                height: 38,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: selected
-                      ? scheme.primary
-                      : scheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Icon(
-                  _icon,
-                  size: 20,
-                  color: selected
-                      ? scheme.onPrimary
-                      : scheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Wrap(
-                      spacing: 5,
-                      runSpacing: 5,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          provider.label,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
-                              ?.copyWith(fontWeight: FontWeight.w700),
-                        ),
-                        _SttMiniBadge(text: _t(provider.categoryLabel, provider.isLocal ? 'Local' : 'Cloud')),
-                        if (provider == TranscriptionProvider.groq)
-                          _SttMiniBadge(text: _t('기본 추천', 'Recommended')),
-                        if (provider ==
-                            TranscriptionProvider.localSenseVoice)
-                          _SttMiniBadge(text: _t('로컬 추천', 'Local pick')),
-                        if (!supported)
-                          _SttMiniBadge(text: _t('현재 언어 미지원', 'Language not supported')),
-                        if (installed != null)
-                          _SttMiniBadge(
-                            text: installed! ? _t('설치됨', 'Installed') : _t('다운로드 필요', 'Download required'),
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      provider.headlineFor(useEnglish),
-                      style: Theme.of(context).textTheme.bodyMedium,
-                    ),
-                    const SizedBox(height: 7),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 5,
-                      children: [
-                        _SttMiniBadge(text: _t('속도 ${provider.speedLabel}', 'Speed: ${provider.speedLabelFor(true)}')),
-                        _SttMiniBadge(
-                          text: _t('정확도 ${provider.accuracyLabel}', 'Accuracy: ${provider.accuracyLabelFor(true)}'),
-                        ),
-                        _SttMiniBadge(text: _t(provider.privacyLabel, provider.isLocal ? 'On device' : 'Cloud upload')),
-                      ],
-                    ),
-                    const SizedBox(height: 7),
-                    Text(
-                      provider.quotaLabelFor(useEnglish),
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                            color: scheme.primary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                    ),
-                    const SizedBox(height: 5),
-                    Text(
-                      provider.strengthFor(useEnglish),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _t('주의: ${provider.tradeoff}', 'Note: ${provider.tradeoffFor(true)}'),
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: scheme.onSurfaceVariant,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
               Icon(
                 !supported
                     ? Icons.block_rounded
                     : selected
-                        ? Icons.check_circle_rounded
+                        ? Icons.radio_button_checked_rounded
                         : Icons.radio_button_unchecked_rounded,
                 size: 22,
-                color: selected && supported
-                    ? scheme.primary
-                    : scheme.outline,
+                color: selected && supported ? scheme.primary : scheme.outline,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Opacity(
+                  opacity: supported ? 1 : 0.55,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            provider.shortLabel,
+                            style: text.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+                          ),
+                          if (_recommended) _SttMiniBadge(text: _t('추천', 'Recommended')),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _summary,
+                        style: text.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+                      ),
+                      if (status != null) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          status,
+                          style: text.bodySmall?.copyWith(
+                            color: supported ? scheme.primary : scheme.error,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ],
           ),
@@ -7008,76 +6962,6 @@ class _SttMiniBadge extends StatelessWidget {
               color: scheme.onSurfaceVariant,
               fontWeight: FontWeight.w600,
             ),
-      ),
-    );
-  }
-}
-
-class _UsagePanel extends StatelessWidget {
-  const _UsagePanel({
-    required this.title,
-    required this.progress,
-    required this.primaryText,
-    required this.secondaryText,
-  });
-
-  final String title;
-  final double? progress;
-  final String primaryText;
-  final String secondaryText;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-        color: scheme.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.outlineVariant),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.data_usage_rounded, size: 19),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 9),
-          Text(
-            primaryText,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-          ),
-          if (progress != null) ...[
-            const SizedBox(height: 8),
-            LinearProgressIndicator(
-              value: progress!.clamp(0.0, 1.0),
-              minHeight: 6,
-              borderRadius: BorderRadius.circular(99),
-            ),
-          ],
-          const SizedBox(height: 7),
-          Text(
-            secondaryText,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: scheme.onSurfaceVariant,
-                  height: 1.35,
-                ),
-          ),
-        ],
       ),
     );
   }

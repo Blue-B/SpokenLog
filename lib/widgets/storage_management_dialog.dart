@@ -114,8 +114,8 @@ class _StorageManagementDialogState extends State<StorageManagementDialog> {
       child: AlertDialog(
         title: Text(
           _t(
-            uninstall ? '프로그램 제거 전 데이터 선택' : '저장공간 관리',
-            uninstall ? 'Data before uninstall' : 'Storage management',
+            uninstall ? '프로그램 제거 전 데이터 선택' : '저장공간 정리',
+            uninstall ? 'Data before uninstall' : 'Free up space',
           ),
         ),
         content: SizedBox(
@@ -152,8 +152,8 @@ class _StorageManagementDialogState extends State<StorageManagementDialog> {
                   children: [
                     Text(
                       _t(
-                        '기본값은 모두 보존입니다. Windows와 macOS에서는 앱 파일만 지워도 데이터가 남을 수 있으므로 제거 전에 여기서 정리하세요.',
-                        'Everything is kept by default. On Windows and macOS, deleting the app alone can leave data behind. Clean it here before removal.',
+                        '지울 것만 골라 체크하세요. 체크하지 않은 것은 그대로 남습니다.',
+                        'Tick only what you want to delete. Everything else stays.',
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -176,7 +176,7 @@ class _StorageManagementDialogState extends State<StorageManagementDialog> {
                       onChanged: _busy
                           ? null
                           : (v) => setState(() => _models = v!),
-                      title: Text(_t('다운로드한 모델', 'Downloaded models')),
+                      title: Text(_t('받아 둔 음성 모델', 'Downloaded speech models')),
                       subtitle: Text(_size(usage.modelBytes)),
                     ),
                     CheckboxListTile(
@@ -187,7 +187,7 @@ class _StorageManagementDialogState extends State<StorageManagementDialog> {
                           ? null
                           : (v) => setState(() => _settings = v!),
                       title: Text(
-                        _t('API 키와 앱 설정', 'API keys and preferences'),
+                        _t('연결 키와 앱 설정', 'Service keys and preferences'),
                       ),
                     ),
                     ExpansionTile(

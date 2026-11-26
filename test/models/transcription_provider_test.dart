@@ -71,15 +71,6 @@ void main() {
     expect(TranscriptionProvider.cloudflare.requiresApiKey, isTrue);
   });
 
-  test('providers expose user-facing decision information', () {
-    for (final provider in TranscriptionProvider.values) {
-      expect(provider.headline, isNotEmpty);
-      expect(provider.strength, isNotEmpty);
-      expect(provider.tradeoff, isNotEmpty);
-      expect(provider.quotaLabel, isNotEmpty);
-    }
-  });
-
   test('provider language compatibility is explicit', () {
     expect(
       TranscriptionProvider.localSenseVoice

@@ -91,7 +91,7 @@ class _LocalModelsDialogState extends State<LocalModelsDialog> {
     return PopScope(
       canPop: !busy,
       child: AlertDialog(
-        title: Text(_t('로컬 모델 관리', 'Local models')),
+        title: Text(_t('음성 모델 받기', 'Speech models')),
         content: SizedBox(
           width: 560,
           child: SingleChildScrollView(
@@ -100,10 +100,10 @@ class _LocalModelsDialogState extends State<LocalModelsDialog> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  _t('기기 안에서 전사할 때 쓰는 모델입니다. 어떤 엔진으로 전사할지는 '
-                      '설정의 "전사 방식과 녹음 언어"에서 고릅니다.',
-                      'Models used for on-device transcription. Choose the engine '
-                      'in "Transcription and audio language".'),
+                  _t('인터넷 없이 이 기기에서 글로 바꿀 때 쓰는 모델입니다. 한 번 받으면 '
+                      '계속 쓸 수 있고, 어떤 모델을 쓸지는 설정의 "글로 바꾸는 방법"에서 고릅니다.',
+                      'Used to transcribe on this device without internet. Download once; '
+                      'choose which one to use in "How speech becomes text".'),
                   style: Theme.of(context)
                       .textTheme
                       .bodySmall
@@ -179,17 +179,17 @@ class _LocalModelsDialogState extends State<LocalModelsDialog> {
               children: [
                 const SizedBox(width: indent),
                 if (installed)
-                  Text(_t('설치됨', 'Installed'),
+                  Text(_t('받음', 'Downloaded'),
                       style: theme.textTheme.labelMedium?.copyWith(color: scheme.primary)),
                 const Spacer(),
                 installed
                     ? OutlinedButton(
                         onPressed: busy ? null : () => _run(model, install: false),
-                        child: Text(_t('삭제', 'Remove')),
+                        child: Text(_t('지우기', 'Remove')),
                       )
                     : FilledButton(
                         onPressed: busy ? null : () => _run(model, install: true),
-                        child: Text(_t('다운로드', 'Download')),
+                        child: Text(_t('받기', 'Download')),
                       ),
               ],
             ),
